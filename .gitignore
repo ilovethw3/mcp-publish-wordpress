@@ -1,0 +1,68 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# 环境变量和配置
+.env
+.env.local
+.env.production
+.env.test
+
+# 虚拟环境
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 数据库
+*.db
+*.sqlite3
+
+# 日志
+*.log
+logs/
+
+# 测试
+.coverage
+htmlcov/
+.pytest_cache/
+.cache
+
+# Docker
+.dockerignore
+
+# MacOS
+.DS_Store
+
+# 前端依赖和构建
+frontend/node_modules/
+frontend/dist/
+frontend/.nuxt/
+frontend/.output/
+frontend/.vite/

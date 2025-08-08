@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  fastapi_app:
+    build: .
+    container_name: mcp_fastapi
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://mcpuser:mcppassword@postgres:5432/mcpdb
+    depends_on:
+      - postgres
+    volumes:
+      - .:/app
+    command: uvicorn mcp.main:app --host 0.0.0.0 --port 8000 --reload
+
+  postgres:
+    image: postgres:15
+    container_name: mcp_postgres
+    environment:
+      POSTGRES_USER: mcpuser
+      POSTGRES_PASSWORD: mcppassword
+      POSTGRES_DB: mcpdb
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  nginx:
+    image: nginx:alpine
+    container_name: mcp_nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+    depends_on:
+      - fastapi_app
+
+volumes:
+  postgres_data:

@@ -1,0 +1,33 @@
+# FastAPI 核心
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+
+# 数据库相关
+sqlmodel==0.0.14
+psycopg[binary,pool]==3.2.3
+psycopg2-binary==2.9.9
+alembic==1.12.1
+
+# 认证和安全
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+python-multipart==0.0.6
+
+# HTTP 客户端
+requests==2.31.0
+
+# 配置管理
+python-dotenv==1.0.0
+pydantic-settings==2.0.3
+
+# Markdown processing
+markdown==3.5.1
+
+# 开发和测试
+pytest==7.4.3
+pytest-asyncio==0.21.1
+pytest-mock==3.12.0
+httpx==0.25.2
+
+# CORS 支持
+python-multipart==0.0.6

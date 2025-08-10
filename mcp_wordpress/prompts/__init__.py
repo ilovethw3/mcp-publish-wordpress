@@ -1,0 +1,1 @@
+"""MCP Prompts for content creation templates."""

@@ -1,0 +1,1 @@
+"""MCP Resources for article data and system status."""

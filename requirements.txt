@@ -1,0 +1,42 @@
+# MCP Core Dependencies
+mcp>=0.5.0
+fastmcp>=2.11.0
+
+# Database and ORM
+sqlmodel>=0.0.14
+psycopg2-binary>=2.9.9
+asyncpg>=0.29.0
+alembic>=1.13.1
+
+# WordPress Integration
+requests>=2.31.0
+aiohttp>=3.9.1
+
+# Security and Authentication
+passlib[bcrypt]>=1.7.4
+python-jose[cryptography]>=3.3.0
+
+# Content Processing
+markdown>=3.5.1
+bleach>=6.1.0
+
+# Configuration and Environment
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+python-dotenv>=1.0.0
+
+# Async Support and Web Server
+asyncio>=3.4.3
+uvloop>=0.19.0
+uvicorn[standard]>=0.24.0
+websockets>=12.0
+wsproto>=1.2.0
+
+# Logging and Monitoring
+structlog>=23.2.0
+
+# Development Dependencies
+pytest>=7.4.3
+pytest-asyncio>=0.21.1
+pytest-mock>=3.12.0
+httpx>=0.25.2

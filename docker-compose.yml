@@ -1,0 +1,66 @@
+version: '3.8'
+
+services:
+  mcp-server:
+    build: .
+    environment:
+      - MCP_TRANSPORT=${MCP_TRANSPORT:-stdio}
+      - MCP_PORT=${MCP_PORT:-8000}
+      - DATABASE_URL=postgresql://mcpuser:mcppass@postgres:5432/mcpdb
+      - WORDPRESS_API_URL=${WORDPRESS_API_URL}
+      - WORDPRESS_USERNAME=${WORDPRESS_USERNAME}
+      - WORDPRESS_APP_PASSWORD=${WORDPRESS_APP_PASSWORD}
+      - SECRET_KEY=${SECRET_KEY}
+      - AGENT_API_KEY=${AGENT_API_KEY}
+      - DEBUG=${DEBUG:-false}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./logs:/app/logs
+    command: python -m mcp_wordpress.server
+    
+  mcp-server-sse:
+    build: .
+    environment:
+      - MCP_TRANSPORT=sse
+      - MCP_PORT=8000
+      - MCP_SSE_PATH=/sse
+      - DATABASE_URL=postgresql://mcpuser:mcppass@postgres:5432/mcpdb
+      - WORDPRESS_API_URL=${WORDPRESS_API_URL}
+      - WORDPRESS_USERNAME=${WORDPRESS_USERNAME}
+      - WORDPRESS_APP_PASSWORD=${WORDPRESS_APP_PASSWORD}
+      - SECRET_KEY=${SECRET_KEY}
+      - AGENT_API_KEY=${AGENT_API_KEY}
+      - DEBUG=${DEBUG:-false}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./logs:/app/logs
+    command: python -m mcp_wordpress.server sse
+    profiles:
+      - sse
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: mcpdb
+      POSTGRES_USER: mcpuser
+      POSTGRES_PASSWORD: mcppass
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mcpuser -d mcpdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:

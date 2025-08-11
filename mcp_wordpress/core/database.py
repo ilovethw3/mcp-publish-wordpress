@@ -9,12 +9,17 @@ from typing import AsyncGenerator
 from mcp_wordpress.core.config import settings
 
 
-# Sync engine for migrations
-sync_engine = create_engine(settings.database_url, echo=settings.debug)
+# Sync engine for migrations (convert asyncpg URL to sync psycopg2 URL)
+sync_database_url = settings.database_url.replace("postgresql+asyncpg://", "postgresql://")
+sync_engine = create_engine(sync_database_url, echo=settings.debug)
 
-# Async engine for application use
+# Async engine for application use (ensure asyncpg URL)
+async_database_url = settings.database_url
+if "postgresql+asyncpg://" not in async_database_url:
+    async_database_url = async_database_url.replace("postgresql://", "postgresql+asyncpg://")
+
 async_engine = create_async_engine(
-    settings.database_url.replace("postgresql://", "postgresql+asyncpg://"),
+    async_database_url,
     echo=settings.debug,
     pool_size=20,
     max_overflow=30,

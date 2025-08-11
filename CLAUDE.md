@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is an MCP (Model Context Protocol) server for WordPress content publishing. The system enables AI agents to submit articles for human review and automatic WordPress publishing through a complete async workflow.
 
+**Current Version**: v2.1 featuring multi-agent API key authentication, multi-WordPress site support, and a Next.js web management interface for personal use scenarios.
+
 ## Key Commands
 
 ### Virtual Environment
@@ -21,6 +23,27 @@ python -m mcp_wordpress.server
 
 # Start MCP server in SSE mode (for web/HTTP integration)
 python -m mcp_wordpress.server sse
+```
+
+### Web UI Development
+```bash
+# Navigate to web UI directory
+cd web-ui
+
+# Install dependencies
+npm install
+
+# Start development server
+npm run dev
+
+# Build for production
+npm run build
+
+# Type checking
+npm run type-check
+
+# Linting
+npm run lint
 ```
 
 ### Testing
@@ -55,21 +78,30 @@ python create_user.py
 ### Docker Operations
 ```bash
 # Development with local database
-docker-compose up postgres
+docker-compose up postgres redis
 
-# Full SSE deployment
-docker-compose --profile sse up --build
+# Full production deployment with web UI
+./deploy.sh -e production -b up
 
-# Full stdio deployment  
-docker-compose up --build
+# SSE deployment only
+docker-compose up mcp-server postgres redis
+
+# Development with monitoring
+./deploy.sh -e development --monitoring up
 ```
 
 ## Architecture Overview
 
+### V2.1 Multi-Tier Architecture
+The system consists of three main tiers:
+- **Backend MCP Server**: FastMCP-based server with multi-agent/multi-site support
+- **Web Management Interface**: Next.js 14 application for configuration and monitoring
+- **Supporting Services**: PostgreSQL, Redis, monitoring (Prometheus/Grafana)
+
 ### MCP Protocol Implementation
 The server implements the complete MCP specification with three primary components:
-- **Tools**: Interactive functions AI can invoke (article management, approval workflows)
-- **Resources**: Read-only data endpoints (article feeds, statistics, configuration)
+- **Tools**: Interactive functions AI can invoke (article management, approval workflows, multi-agent operations)
+- **Resources**: Read-only data endpoints (article feeds, statistics, agent/site configuration)
 - **Prompts**: Template generation for content creation and review
 
 ### Core Architecture Patterns
@@ -78,11 +110,23 @@ The server implements the complete MCP specification with three primary componen
 ```python
 # In mcp_wordpress/server.py
 def create_mcp_server() -> FastMCP:
-    mcp = FastMCP(name=settings.mcp_server_name, version="2.0.0")
-    register_article_tools(mcp)      # Tools registration
-    register_article_resources(mcp)  # Resources registration  
-    register_content_prompts(mcp)    # Prompts registration
+    mcp = FastMCP(name=settings.mcp_server_name, version="2.1.0")
+    register_article_tools(mcp)      # Article management tools
+    register_agent_tools(mcp)        # Multi-agent management
+    register_site_tools(mcp)         # Multi-site management
+    register_article_resources(mcp)  # Data resources
+    register_content_prompts(mcp)    # Content templates
     return mcp
+```
+
+**Multi-Agent Authentication Pattern:**
+```python
+# In mcp_wordpress/auth/providers.py
+class MultiAgentAuthProvider(BearerAuthProvider):
+    async def validate_token(self, token: str) -> Optional[AccessToken]:
+        agent_id = self.config_manager.validate_api_key(token)
+        if agent_id:
+            return AccessToken(subject=agent_id, scopes=["article:submit"])
 ```
 
 **Async Database Session Pattern:**
@@ -109,14 +153,37 @@ except Exception as e:
     return error.to_json()
 ```
 
-### Key Modules
+**Web UI Configuration Management Pattern:**
+```typescript
+// In web-ui/src/hooks/useConfigManagement.ts
+export function useAgentConfig() {
+    const { data, mutate } = useSWR('/api/config/agents');
+    const createAgent = useCallback(async (agentData) => {
+        const response = await fetch('/api/config/agents', {
+            method: 'POST',
+            body: JSON.stringify(agentData)
+        });
+        mutate(); // Refresh data
+    });
+}
+```
+
+### Key Backend Modules
 - `mcp_wordpress/server.py` - Main MCP server with transport handling (stdio/SSE)
-- `mcp_wordpress/tools/articles.py` - All article management tools with async database operations
-- `mcp_wordpress/resources/articles.py` - Article data resources (pending, published, failed)
-- `mcp_wordpress/resources/stats.py` - System statistics and WordPress configuration
-- `mcp_wordpress/core/wordpress.py` - WordPress REST API client with async HTTP
-- `mcp_wordpress/core/database.py` - AsyncSession management and connection pooling
-- `mcp_wordpress/models/article.py` - SQLModel with proper timezone handling
+- `mcp_wordpress/tools/articles.py` - Article management tools with async database operations
+- `mcp_wordpress/tools/agents.py` - Multi-agent management tools
+- `mcp_wordpress/tools/sites.py` - Multi-site management tools
+- `mcp_wordpress/auth/` - Multi-agent authentication system
+- `mcp_wordpress/config/` - Agent and site configuration managers
+- `mcp_wordpress/core/multi_site_publisher.py` - Multi-site publishing engine
+- `mcp_wordpress/models/` - SQLModel with timezone handling and v2.1 extensions
+
+### Key Frontend Modules
+- `web-ui/src/app/` - Next.js 14 App Router pages
+- `web-ui/src/components/` - Reusable UI components
+- `web-ui/src/hooks/` - Custom hooks for data fetching and configuration management
+- `web-ui/src/app/api/` - Next.js API Routes for configuration management
+- `web-ui/src/types/` - TypeScript type definitions
 
 ## Database & ORM Critical Notes
 
@@ -134,6 +201,20 @@ created_at: datetime = Field(
     sa_column=Column(DateTime(timezone=True), server_default=func.now())
 )
 # Don't manually set timestamps in tools - let model defaults handle it
+```
+
+### V2.1 Model Extensions
+```python
+# Article model v2.1 additions
+agent_id: Optional[str] = Field(default=None, description="Submitting agent identifier")
+target_site: Optional[str] = Field(default=None, description="Target WordPress site")
+
+# New Site model for multi-site support
+class Site(SQLModel, table=True):
+    id: str = Field(primary_key=True)
+    name: str
+    wordpress_config: dict  # WordPress API configuration
+    publishing_rules: dict  # Site-specific publishing rules
 ```
 
 ## Testing Architecture
@@ -155,6 +236,35 @@ mock_result.scalar = lambda: 5  # For count queries
 mock_db_session.execute = AsyncMock(return_value=mock_result)
 ```
 
+## Configuration Management
+
+### YAML Configuration Files
+V2.1 uses YAML files for multi-agent and multi-site configuration:
+- `config/agents.yml` - Agent definitions with API keys and permissions
+- `config/sites.yml` - WordPress site configurations and publishing rules
+
+### Web UI Configuration API Pattern
+```typescript
+// Configuration API Routes pattern
+// web-ui/src/app/api/config/agents/route.ts
+export async function POST(request: NextRequest) {
+    const body = await request.json();
+    // Validate agent data
+    const errors = validateAgent(body);
+    if (errors.length > 0) {
+        return NextResponse.json({ success: false, errors });
+    }
+    // Update YAML file and return success
+}
+```
+
+### Dynamic Configuration Management
+The web UI provides full CRUD operations for agents and sites:
+- **Empty defaults**: Configuration files start empty, managed via web interface
+- **Real-time updates**: Changes immediately reflected in both UI and MCP server
+- **Validation**: Comprehensive form validation and error handling
+- **Testing integration**: Connection testing for WordPress sites during configuration
+
 ## MCP Transport Configuration
 
 ### SSE Mode (Web/HTTP Integration)
@@ -175,10 +285,11 @@ mock_db_session.execute = AsyncMock(return_value=mock_result)
 3. User needs `publish_posts` capability
 4. HTTPS recommended for production
 
-### API Error Handling
+### Multi-Site API Pattern
 ```python
-# WordPress client pattern
-wp_client = WordPressClient()
+# Multi-site WordPress client pattern
+site_config = self.site_manager.get_site(site_id)
+wp_client = WordPressClient(site_config.wordpress_config)
 try:
     result = await wp_client.create_post(title, content_markdown, tags, category)
     # Returns {"id": post_id, "link": permalink}
@@ -189,17 +300,48 @@ except Exception as e:
 
 ## Environment Configuration
 
-### Required Variables
+### Required Backend Variables
 ```bash
-DATABASE_URL=postgresql+asyncpg://user:pass@localhost:5432/mcpdb  # Note: +asyncpg for async
-WORDPRESS_API_URL=https://site.com/wp-json/wp/v2
-WORDPRESS_USERNAME=username
-WORDPRESS_APP_PASSWORD=xxxx xxxx xxxx xxxx  # Application password format
-SECRET_KEY=jwt-secret-key
-AGENT_API_KEY=api-key-for-agents
+# Database Configuration
+DATABASE_URL=postgresql+asyncpg://user:pass@localhost:5432/mcpdb_v21
+REDIS_URL=redis://:password@localhost:6379/0
+
+# MCP Server Configuration
 MCP_TRANSPORT=sse  # or stdio
 MCP_PORT=8000
-MCP_SSE_PATH=/sse  # SSE endpoint path (without trailing slash to avoid redirects)
+MCP_SSE_PATH=/sse
+MCP_SERVER_NAME="MCP WordPress Publisher v2.1"
+
+# Security Configuration
+SECRET_KEY=jwt-secret-key
+JWT_SECRET_KEY=jwt-secret
+ENCRYPTION_KEY=encryption-key
+
+# Multi-Agent/Site Configuration
+AGENT_CONFIG_PATH=/app/config/agents.yml
+SITE_CONFIG_PATH=/app/config/sites.yml
+MULTI_AGENT_MODE=true
+MULTI_SITE_MODE=true
+
+# Feature Flags
+DEBUG=false
+ENABLE_RATE_LIMITING=true
+ENABLE_API_VERSIONING=true
+ENABLE_AUDIT_LOGGING=true
+ENABLE_METRICS=true
+```
+
+### Web UI Environment Variables
+```bash
+# Next.js Configuration
+NEXT_PUBLIC_MCP_SERVER_URL=http://localhost:8000
+NEXT_PUBLIC_MCP_SSE_PATH=/sse
+NEXTAUTH_SECRET=your-nextauth-secret
+NEXTAUTH_URL=http://localhost:3000
+
+# Feature Flags
+NEXT_PUBLIC_ENABLE_REALTIME=true
+NEXT_PUBLIC_POLLING_INTERVAL=30000
 ```
 
 ## Development Patterns
@@ -212,17 +354,21 @@ MCP_SSE_PATH=/sse  # SSE endpoint path (without trailing slash to avoid redirect
 5. Return JSON strings via `create_mcp_success()` or error `.to_json()`
 6. Add corresponding unit tests with proper mocks
 
-### Adding New MCP Resources  
-1. Use `@mcp.resource("uri://path")` decorator
-2. Return JSON strings with timestamp metadata
-3. Handle both single items and collections
-4. Add to registration function in module
+### Adding Web UI Components
+1. Follow Next.js 14 App Router patterns
+2. Use TypeScript for all components
+3. Implement proper error boundaries and loading states
+4. Use SWR for data fetching with proper cache management
+5. Follow Tailwind CSS utility-first approach
+6. Implement accessibility standards
 
-### Error Handling Strategy
-- Custom exception classes extend `MCPError` base class
-- All exceptions implement `.to_json()` for MCP-compliant responses  
-- Tools catch specific exceptions first, then general Exception
-- Use proper JSON-RPC 2.0 error codes (-40001 for not found, -32603 for internal)
+### Adding Configuration API Routes
+1. Create API route in `web-ui/src/app/api/` following REST conventions
+2. Implement comprehensive input validation
+3. Handle YAML file operations safely
+4. Return consistent API response format
+5. Include error handling and logging
+6. Test with both valid and invalid inputs
 
 ## Performance & Security Notes
 
@@ -236,6 +382,43 @@ MCP_SSE_PATH=/sse  # SSE endpoint path (without trailing slash to avoid redirect
 - All user inputs are validated and sanitized (using bleach for content)
 - Database queries use parameterized statements (SQLModel handles this)
 - Implement rate limiting for production deployments
+- Multi-agent API key authentication with JWT tokens
+- Configuration file encryption for sensitive data
+
+### Web UI Security
+- Server-side validation for all configuration changes
+- No sensitive data exposed to client-side JavaScript
+- CSRF protection via Next.js built-in mechanisms
+- Input sanitization for all form data
+
+## Deployment Architecture
+
+### Production Deployment
+```bash
+# Full production deployment with monitoring
+./deploy.sh -e production -b -m --backup up
+
+# Parameters:
+# -e: environment (development, testing, production)
+# -b: build images from scratch
+# -m: enable monitoring (Prometheus/Grafana)
+# --backup: create backup before deployment
+```
+
+### Service Architecture
+- **mcp-server**: Main MCP server (FastMCP + Python)
+- **web-ui**: Management interface (Next.js 14)
+- **postgres**: Database with v2.1 schema
+- **redis**: Session management and caching
+- **prometheus**: Metrics collection
+- **grafana**: Monitoring dashboards
+
+### Health Checks and Monitoring
+All services include comprehensive health checks and monitoring:
+- HTTP health check endpoints
+- Prometheus metrics integration
+- Grafana dashboards for system observability
+- Alert thresholds for failures and performance issues
 
 ## Common Development Issues
 
@@ -249,8 +432,56 @@ MCP_SSE_PATH=/sse  # SSE endpoint path (without trailing slash to avoid redirect
 - If SSE connection fails: Check server is using `run_sse_async()` not `run_http_async()`
 - If stdio hangs: Verify client uses correct server command args
 
+### Web UI Development Issues
+- If API routes fail: Check CORS configuration and Next.js API route structure
+- If configuration changes don't reflect: Ensure SWR cache invalidation
+- If TypeScript errors: Check type definitions in `web-ui/src/types/`
+- If build fails: Run `npm run type-check` to identify TypeScript issues
+
 ### WordPress API Issues
 - Test connection independently: `python test_connection.py`
 - Verify application password format (spaces, not hyphens)
 - Check WordPress user permissions for post creation
 - Ensure REST API is not disabled by security plugins
+- For multi-site: Verify each site configuration independently
+
+## Important Architectural Notes
+
+### FastMCP Server Pattern
+The server uses FastMCP's registration pattern extensively. All new functionality should follow:
+1. Create module-specific registration functions (`register_*_tools`, `register_*_resources`)
+2. Import and call registration functions in `create_mcp_server()` 
+3. Use proper MCP decorators (`@mcp.tool()`, `@mcp.resource()`, `@mcp.prompt()`)
+4. Return JSON strings from all MCP functions, never objects
+
+### Multi-Agent Architecture Principles
+- **Agent Equality**: All agents have same base permissions, roles handled at agent level
+- **Configuration-Driven**: Use YAML files for complex multi-entity management
+- **Backward Compatibility**: Support existing single-agent configurations
+- **Failure Isolation**: Agent failures should not affect other agents
+
+### Multi-Site Architecture Principles
+- **Site Isolation**: Failure in one WordPress site should not affect others
+- **Load Balancing**: Support priority-based and round-robin distribution
+- **Health Monitoring**: Continuous monitoring of site availability and performance
+- **Failover Support**: Automatic failover to alternative sites when configured
+
+### Web UI Architecture Principles
+- **Server-Side Configuration**: All configuration managed server-side via API routes
+- **Real-Time Updates**: Changes reflected immediately across UI and backend
+- **Progressive Enhancement**: Core functionality works without JavaScript
+- **Component Reusability**: Shared components for consistent UX across pages
+
+### Error Handling Philosophy
+- Custom exceptions extend `MCPError` base class
+- All exceptions must implement `.to_json()` for MCP compliance
+- Use specific error codes: -40001 (not found), -32603 (internal error)
+- Never expose sensitive data (passwords, API keys) in error messages
+- Web UI provides user-friendly error messages with technical details in logs
+
+### Testing Strategy
+- Use pytest markers: `@pytest.mark.unit`, `@pytest.mark.integration`, `@pytest.mark.slow`
+- Mock database using the established AsyncMock pattern
+- Integration tests should use real MCP protocol communication
+- Test files in `mcp_wordpress/tests/` follow naming convention `test_*.py`
+- Web UI testing focuses on API route functionality and component behavior

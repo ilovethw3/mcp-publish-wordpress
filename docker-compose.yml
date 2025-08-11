@@ -1,66 +1,200 @@
-version: '3.8'
+version: '3.9'
 
 services:
-  mcp-server:
-    build: .
-    environment:
-      - MCP_TRANSPORT=${MCP_TRANSPORT:-stdio}
-      - MCP_PORT=${MCP_PORT:-8000}
-      - DATABASE_URL=postgresql://mcpuser:mcppass@postgres:5432/mcpdb
-      - WORDPRESS_API_URL=${WORDPRESS_API_URL}
-      - WORDPRESS_USERNAME=${WORDPRESS_USERNAME}
-      - WORDPRESS_APP_PASSWORD=${WORDPRESS_APP_PASSWORD}
-      - SECRET_KEY=${SECRET_KEY}
-      - AGENT_API_KEY=${AGENT_API_KEY}
-      - DEBUG=${DEBUG:-false}
-      - LOG_LEVEL=${LOG_LEVEL:-INFO}
-    depends_on:
-      postgres:
-        condition: service_healthy
-    volumes:
-      - ./logs:/app/logs
-    command: python -m mcp_wordpress.server
-    
-  mcp-server-sse:
-    build: .
-    environment:
-      - MCP_TRANSPORT=sse
-      - MCP_PORT=8000
-      - MCP_SSE_PATH=/sse
-      - DATABASE_URL=postgresql://mcpuser:mcppass@postgres:5432/mcpdb
-      - WORDPRESS_API_URL=${WORDPRESS_API_URL}
-      - WORDPRESS_USERNAME=${WORDPRESS_USERNAME}
-      - WORDPRESS_APP_PASSWORD=${WORDPRESS_APP_PASSWORD}
-      - SECRET_KEY=${SECRET_KEY}
-      - AGENT_API_KEY=${AGENT_API_KEY}
-      - DEBUG=${DEBUG:-false}
-      - LOG_LEVEL=${LOG_LEVEL:-INFO}
-    depends_on:
-      postgres:
-        condition: service_healthy
-    ports:
-      - "8000:8000"
-    volumes:
-      - ./logs:/app/logs
-    command: python -m mcp_wordpress.server sse
-    profiles:
-      - sse
-
+  # PostgreSQL Database
   postgres:
-    image: postgres:15-alpine
+    image: postgres:16
     environment:
-      POSTGRES_DB: mcpdb
+      POSTGRES_DB: mcpdb_v21
       POSTGRES_USER: mcpuser
-      POSTGRES_PASSWORD: mcppass
+      POSTGRES_PASSWORD: mcppass_secure_2024
+      POSTGRES_HOST_AUTH_METHOD: md5
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./init-scripts:/docker-entrypoint-initdb.d
     ports:
-      - "5432:5432"
+      - "5433:5432"  # Changed port to avoid conflicts
+    networks:
+      - mcp-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U mcpuser -d mcpdb"]
+      test: ["CMD-SHELL", "pg_isready -U mcpuser -d mcpdb_v21"]
       interval: 10s
       timeout: 5s
       retries: 5
 
+  # Redis for session management and caching
+  redis:
+    image: redis:7-alpine
+    command: redis-server --requirepass mcpredis_secure_2024
+    ports:
+      - "6380:6379"  # Changed port to avoid conflicts
+    volumes:
+      - redis_data:/data
+    networks:
+      - mcp-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # MCP WordPress Publisher Server v2.1
+  mcp-server:
+    build:
+      context: .
+      dockerfile: Dockerfile.mcp-server
+      target: production
+    environment:
+      # Database Configuration
+      DATABASE_URL: postgresql+asyncpg://mcpuser:mcppass_secure_2024@postgres:5432/mcpdb_v21
+      
+      # Redis Configuration
+      REDIS_URL: redis://:mcpredis_secure_2024@redis:6379/0
+      
+      # MCP Server Configuration
+      MCP_TRANSPORT: sse
+      MCP_PORT: 8000
+      MCP_SSE_PATH: /sse
+      MCP_SERVER_NAME: "MCP WordPress Publisher v2.1"
+      
+      # Security Configuration
+      SECRET_KEY: ${SECRET_KEY:-your-secret-key-here}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-your-jwt-secret-key-here}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-your-encryption-key-here}
+      
+      # Multi-Agent Configuration
+      AGENT_CONFIG_PATH: /app/config/agents.yml
+      MULTI_AGENT_MODE: "true"
+      
+      # Multi-Site Configuration  
+      SITE_CONFIG_PATH: /app/config/sites.yml
+      MULTI_SITE_MODE: "true"
+      
+      # Logging and Monitoring
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      ENABLE_AUDIT_LOGGING: "true"
+      ENABLE_METRICS: "true"
+      
+      # Feature Flags
+      DEBUG: ${DEBUG:-false}
+      ENABLE_RATE_LIMITING: "true"
+      ENABLE_API_VERSIONING: "true"
+      
+    volumes:
+      - ./config:/app/config:ro
+      - mcp_logs:/app/logs
+      - mcp_uploads:/app/uploads
+    ports:
+      - "${MCP_PORT:-8000}:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - mcp-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+        reservations:
+          memory: 512M
+          cpus: '0.5'
+
+  # Web Management Interface
+  web-ui:
+    build:
+      context: ./web-ui
+      dockerfile: Dockerfile.web-ui
+      target: production
+    environment:
+      # Next.js Configuration
+      NEXT_PUBLIC_MCP_SERVER_URL: http://mcp-server:8000
+      NEXT_PUBLIC_MCP_SSE_PATH: /sse
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-your-nextauth-secret-here}
+      NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}
+      
+      # Feature Flags
+      NEXT_PUBLIC_ENABLE_REALTIME: "true"
+      NEXT_PUBLIC_POLLING_INTERVAL: 30000
+      
+    ports:
+      - "${WEB_UI_PORT:-3000}:3000"
+    depends_on:
+      - mcp-server
+    networks:
+      - mcp-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+
+  # Monitoring and Observability
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    networks:
+      - mcp-network
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+
+  grafana:
+    image: grafana/grafana:latest
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_INSTALL_PLUGINS: grafana-clock-panel,grafana-simple-json-datasource
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    ports:
+      - "${GRAFANA_PORT:-3001}:3000"
+    depends_on:
+      - prometheus
+    networks:
+      - mcp-network
+
 volumes:
   postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  mcp_logs:
+    driver: local
+  mcp_uploads:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+networks:
+  mcp-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+
+# Note: For different deployment scenarios, use deploy.sh script
+# Development: ./deploy.sh -e development up  
+# Production: ./deploy.sh -e production up
+# Testing: ./deploy.sh -e testing up

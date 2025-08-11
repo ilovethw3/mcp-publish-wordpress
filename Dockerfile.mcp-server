@@ -1,0 +1,89 @@
+# Multi-stage build for MCP WordPress Publisher Server v2.1
+FROM python:3.11-slim as base
+
+# System dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    gcc \
+    g++ \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create app directory
+WORKDIR /app
+
+# Create non-root user
+RUN groupadd -r mcp && useradd -r -g mcp mcp
+RUN mkdir -p /app/logs /app/uploads /app/config && \
+    chown -R mcp:mcp /app
+
+# Development stage
+FROM base as development
+
+# Install dependencies
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy source code
+COPY --chown=mcp:mcp . .
+
+# Switch to non-root user
+USER mcp
+
+# Expose port
+EXPOSE 8000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# Development command
+CMD ["python", "-m", "mcp_wordpress.server", "sse"]
+
+# Production stage
+FROM base as production
+
+# Install production dependencies only
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir gunicorn uvloop
+
+# Copy source code
+COPY --chown=mcp:mcp mcp_wordpress ./mcp_wordpress/
+COPY --chown=mcp:mcp alembic.ini ./
+COPY --chown=mcp:mcp alembic ./alembic/
+
+# Copy configuration templates
+COPY --chown=mcp:mcp config/agents.yml.template ./config/agents.yml.template
+COPY --chown=mcp:mcp config/sites.yml.template ./config/sites.yml.template
+COPY --chown=mcp:mcp config/logging.yml ./config/logging.yml
+
+# Create production entrypoint script
+COPY --chown=mcp:mcp docker-entrypoint.sh ./
+RUN chmod +x docker-entrypoint.sh
+
+# Switch to non-root user
+USER mcp
+
+# Expose port
+EXPOSE 8000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# Production command with proper process management
+ENTRYPOINT ["./docker-entrypoint.sh"]
+CMD ["production"]
+
+# Testing stage
+FROM development as testing
+
+# Install test dependencies
+RUN pip install --no-cache-dir pytest pytest-asyncio pytest-cov
+
+# Copy test files
+COPY --chown=mcp:mcp tests ./tests/
+
+# Test command
+CMD ["python", "-m", "pytest", "tests/", "-v", "--cov=mcp_wordpress"]

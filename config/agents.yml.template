@@ -1,0 +1,212 @@
+# Multi-Agent Configuration for MCP WordPress Publisher v2.1
+# This file defines multiple AI agents that can submit articles for publishing
+
+# Global agent settings
+global_settings:
+  # Default rate limiting per agent
+  default_rate_limit:
+    requests_per_minute: 10
+    requests_per_hour: 100
+    requests_per_day: 500
+  
+  # Default timeout settings
+  default_timeouts:
+    submission_timeout: 30  # seconds
+    approval_timeout: 300   # seconds
+  
+  # Security settings
+  security:
+    require_api_key: true
+    enable_ip_whitelist: false
+    session_timeout: 3600  # seconds
+    max_failed_attempts: 5
+    lockout_duration: 900  # seconds (15 minutes)
+
+# Individual agent configurations
+agents:
+  # Content Creation Agent
+  - id: "content-creator-001"
+    name: "Content Creator Agent"
+    description: "Primary content creation agent for blog posts and articles"
+    
+    # Authentication
+    api_key: "${CONTENT_CREATOR_API_KEY:-cc_api_key_placeholder}"
+    
+    # Rate limiting (overrides global defaults)
+    rate_limit:
+      requests_per_minute: 15
+      requests_per_hour: 150
+      requests_per_day: 1000
+    
+    # Permissions
+    permissions:
+      can_submit_articles: true
+      can_edit_own_articles: true
+      can_delete_own_articles: false
+      can_view_statistics: true
+      allowed_categories:
+        - "Technology"
+        - "AI & Machine Learning"
+        - "Programming"
+        - "Web Development"
+      allowed_tags:
+        - "ai"
+        - "tech"
+        - "programming"
+        - "tutorial"
+        - "guide"
+    
+    # Notification settings
+    notifications:
+      on_approval: false
+      on_rejection: true
+      on_publish_success: true
+      on_publish_failure: true
+    
+    # Metadata
+    created_at: "2024-01-15T10:00:00Z"
+    status: "active"
+    
+  # Research Agent
+  - id: "research-agent-002"
+    name: "Research & Analysis Agent"
+    description: "Specialized agent for research articles and data analysis"
+    
+    api_key: "${RESEARCH_AGENT_API_KEY:-ra_api_key_placeholder}"
+    
+    rate_limit:
+      requests_per_minute: 8
+      requests_per_hour: 80
+      requests_per_day: 300
+    
+    permissions:
+      can_submit_articles: true
+      can_edit_own_articles: true
+      can_delete_own_articles: false
+      can_view_statistics: true
+      allowed_categories:
+        - "Research"
+        - "Data Science"
+        - "Analytics"
+      allowed_tags:
+        - "research"
+        - "data"
+        - "analysis"
+        - "study"
+        - "report"
+    
+    notifications:
+      on_approval: false
+      on_rejection: true
+      on_publish_success: false
+      on_publish_failure: true
+    
+    created_at: "2024-01-16T14:30:00Z"
+    status: "active"
+    
+  # News Agent
+  - id: "news-agent-003"
+    name: "News Aggregation Agent"
+    description: "Agent focused on news articles and current events"
+    
+    api_key: "${NEWS_AGENT_API_KEY:-na_api_key_placeholder}"
+    
+    rate_limit:
+      requests_per_minute: 20
+      requests_per_hour: 200
+      requests_per_day: 800
+    
+    permissions:
+      can_submit_articles: true
+      can_edit_own_articles: false  # News should not be edited after submission
+      can_delete_own_articles: false
+      can_view_statistics: true
+      allowed_categories:
+        - "News"
+        - "Current Events"
+        - "Industry Updates"
+      allowed_tags:
+        - "news"
+        - "breaking"
+        - "update"
+        - "industry"
+        - "announcement"
+    
+    notifications:
+      on_approval: false
+      on_rejection: true
+      on_publish_success: false
+      on_publish_failure: true
+    
+    created_at: "2024-01-17T09:15:00Z"
+    status: "active"
+    
+  # Tutorial Agent (Inactive example)
+  - id: "tutorial-agent-004"
+    name: "Tutorial Creation Agent"
+    description: "Agent for creating step-by-step tutorials and how-to guides"
+    
+    api_key: "${TUTORIAL_AGENT_API_KEY:-ta_api_key_placeholder}"
+    
+    rate_limit:
+      requests_per_minute: 5
+      requests_per_hour: 50
+      requests_per_day: 200
+    
+    permissions:
+      can_submit_articles: true
+      can_edit_own_articles: true
+      can_delete_own_articles: true
+      can_view_statistics: true
+      allowed_categories:
+        - "Tutorials"
+        - "How-To"
+        - "Guides"
+      allowed_tags:
+        - "tutorial"
+        - "howto"
+        - "guide"
+        - "stepbystep"
+        - "beginner"
+    
+    notifications:
+      on_approval: true
+      on_rejection: true
+      on_publish_success: true
+      on_publish_failure: true
+    
+    created_at: "2024-01-18T16:45:00Z"
+    status: "inactive"  # Example of inactive agent
+
+# Agent groups (for easier management)
+agent_groups:
+  content_team:
+    - "content-creator-001"
+    - "tutorial-agent-004"
+  
+  data_team:
+    - "research-agent-002"
+  
+  news_team:
+    - "news-agent-003"
+
+# Monitoring and alerting
+monitoring:
+  # Alert thresholds
+  alert_on_failed_submissions: 5  # per agent per hour
+  alert_on_high_rejection_rate: 50  # percentage
+  alert_on_agent_lockout: true
+  
+  # Metrics collection
+  collect_metrics: true
+  metrics_retention_days: 90
+  
+  # Health check intervals
+  health_check_interval: 300  # seconds (5 minutes)
+  
+# Audit settings
+audit:
+  log_all_actions: true
+  log_sensitive_data: false
+  retention_days: 365
+  export_format: "json"

@@ -1,0 +1,1 @@
+# MCP WordPress Publisher v2.1 Configuration Module

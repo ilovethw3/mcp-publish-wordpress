@@ -46,6 +46,39 @@ class Article(SQLModel, table=True):
         sa_column=Column(DateTime(timezone=True), server_default=func.now())
     )
     
+    # v2.1新增：多代理支持字段
+    submitting_agent_id: Optional[str] = Field(
+        default=None,
+        max_length=50,
+        description="提交文章的AI代理ID"
+    )
+    submitting_agent_name: Optional[str] = Field(
+        default=None,
+        max_length=100,
+        description="提交代理的显示名称"
+    )
+    agent_metadata: Optional[str] = Field(
+        default=None,
+        description="代理相关元数据（JSON格式）"
+    )
+    
+    # v2.1新增：多站点支持字段
+    target_site_id: Optional[str] = Field(
+        default=None,
+        max_length=50,
+        description="目标发布站点ID"
+    )
+    target_site_name: Optional[str] = Field(
+        default=None,
+        max_length=100,
+        description="目标站点显示名称"
+    )
+    publishing_agent_id: Optional[str] = Field(
+        default=None,
+        max_length=50,
+        description="执行发布操作的代理ID"
+    )
+    
     # Review metadata
     reviewer_notes: Optional[str] = Field(default=None, description="Notes from reviewer")
     rejection_reason: Optional[str] = Field(default=None, description="Reason for rejection")

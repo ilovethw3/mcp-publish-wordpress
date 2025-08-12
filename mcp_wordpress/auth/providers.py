@@ -7,7 +7,8 @@ for multi-agent API key authentication.
 
 import logging
 from typing import Optional, List
-from fastmcp.auth import BearerAuthProvider, AccessToken
+from fastmcp.server.auth import BearerAuthProvider
+from fastmcp.server.dependencies import AccessToken
 
 from mcp_wordpress.config.agents import AgentConfigManager
 from mcp_wordpress.auth.validators import AgentKeyValidator

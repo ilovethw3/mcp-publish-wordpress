@@ -205,22 +205,8 @@ start_server() {
             exec python -m mcp_wordpress.server sse
             ;;
         "production")
-            # Use gunicorn for production with proper worker management
-            exec gunicorn \
-                --bind 0.0.0.0:8000 \
-                --workers 4 \
-                --worker-class uvicorn.workers.UvicornWorker \
-                --worker-connections 1000 \
-                --max-requests 10000 \
-                --max-requests-jitter 1000 \
-                --timeout 120 \
-                --keep-alive 5 \
-                --access-logfile /app/logs/access.log \
-                --error-logfile /app/logs/error.log \
-                --log-level info \
-                --preload \
-                --enable-stdio-inheritance \
-                "mcp_wordpress.server:create_app()"
+            # Run FastMCP server directly in SSE mode for production
+            exec python -m mcp_wordpress.server sse
             ;;
         "stdio")
             exec python -m mcp_wordpress.server stdio

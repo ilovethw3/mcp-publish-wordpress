@@ -8,9 +8,9 @@ and authentication event auditing.
 import logging
 from typing import Dict, Any, Optional
 from datetime import datetime, timezone
-from fastmcp import Middleware
-from fastmcp.auth import get_access_token
-from mcp import ToolError
+from fastmcp.server.middleware import Middleware
+from fastmcp.server.dependencies import get_access_token
+from fastmcp.exceptions import ToolError
 
 from mcp_wordpress.core.errors import AuthenticationError, AuthorizationError
 from mcp_wordpress.core.security import SecurityManager

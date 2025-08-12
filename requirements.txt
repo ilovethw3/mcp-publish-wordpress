@@ -38,6 +38,9 @@ redis>=5.0.0
 # Logging and Monitoring
 structlog>=23.2.0
 
+# File System Monitoring
+watchdog>=3.0.0
+
 # Development Dependencies
 pytest>=7.4.3
 pytest-asyncio>=0.21.1

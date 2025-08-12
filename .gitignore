@@ -75,6 +75,16 @@ Thumbs.db
 *.temp
 .temp/
 
+# Next.js
+web-ui/node_modules/
+web-ui/.next/
+web-ui/.vercel/
+web-ui/out/
+web-ui/.env.local
+web-ui/.env.production.local
+web-ui/.env.staging.local
+web-ui/.env.development.local
+
 # Project specific
 backup_*.sql
 *.backup

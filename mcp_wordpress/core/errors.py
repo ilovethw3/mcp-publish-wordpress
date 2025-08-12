@@ -118,3 +118,57 @@ class ValidationError(MCPError):
             message=f"Validation error for field '{field}': {message}",
             data={"field": field, "validation_error": message}
         )
+
+
+class ConfigurationError(MCPError):
+    """Configuration error."""
+    
+    def __init__(self, message: str, config_file: str = None):
+        super().__init__(
+            code=MCPErrorCodes.INTERNAL_ERROR,
+            message=f"Configuration error: {message}",
+            data={"config_file": config_file} if config_file else None
+        )
+
+
+class AuthenticationError(MCPError):
+    """Authentication error."""
+    
+    def __init__(self, message: str = "Authentication failed"):
+        super().__init__(
+            code=MCPErrorCodes.AUTH_FAILED,
+            message=message
+        )
+
+
+class AuthorizationError(MCPError):
+    """Authorization error."""
+    
+    def __init__(self, message: str = "Authorization failed", required_scope: str = None):
+        super().__init__(
+            code=MCPErrorCodes.AUTH_FAILED,
+            message=message,
+            data={"required_scope": required_scope} if required_scope else None
+        )
+
+
+class SiteNotFoundError(MCPError):
+    """Site not found error."""
+    
+    def __init__(self, site_id: str):
+        super().__init__(
+            code=MCPErrorCodes.INTERNAL_ERROR,
+            message=f"Site with ID '{site_id}' not found",
+            data={"site_id": site_id}
+        )
+
+
+class PublishingError(MCPError):
+    """Publishing error."""
+    
+    def __init__(self, message: str, site_id: str = None, article_id: int = None):
+        super().__init__(
+            code=MCPErrorCodes.WORDPRESS_ERROR,
+            message=f"Publishing error: {message}",
+            data={"site_id": site_id, "article_id": article_id}
+        )

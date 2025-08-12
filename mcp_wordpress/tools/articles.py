@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 from sqlmodel import select
 from fastmcp import FastMCP
-from fastmcp.auth import get_access_token
+from fastmcp.server.dependencies import get_access_token
 import bleach
 
 from mcp_wordpress.core.database import get_session

@@ -3,16 +3,25 @@
 import aiohttp
 import markdown
 from typing import Dict, Any, Optional
-from mcp_wordpress.core.config import settings
 
 
 class WordPressClient:
     """Async WordPress REST API client with connection management."""
     
-    def __init__(self, api_url: str = None, username: str = None, app_password: str = None):
-        self.api_url = api_url or settings.wordpress_api_url
-        self.username = username or settings.wordpress_username
-        self.app_password = app_password or settings.wordpress_app_password
+    def __init__(self, api_url: str, username: str, app_password: str):
+        """Initialize WordPress client with required credentials.
+        
+        Args:
+            api_url: WordPress REST API base URL (e.g., https://example.com/wp-json/wp/v2)
+            username: WordPress username
+            app_password: WordPress application password
+        """
+        if not api_url or not username or not app_password:
+            raise ValueError("api_url, username, and app_password are required")
+            
+        self.api_url = api_url
+        self.username = username
+        self.app_password = app_password
         self.auth = aiohttp.BasicAuth(self.username, self.app_password)
         self._session: Optional[aiohttp.ClientSession] = None
         

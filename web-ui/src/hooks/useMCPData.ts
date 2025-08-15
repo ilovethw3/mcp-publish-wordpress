@@ -90,14 +90,23 @@ export function useAgents(includeInactive = false) {
     () => apiClient.getAgents(includeInactive),
     {
       refreshInterval: 60000, // Refresh every minute
+      onError: (error) => {
+        // 只在网络错误或真正的服务器错误时显示错误
+        // 404 或空数据不算错误
+        console.warn('Agent data fetch warning:', error);
+      }
     }
   );
+
+  // 更智能的错误处理：区分真正的错误和正常的空状态
+  const hasRealError = error && !error.message?.includes('404') && !error.message?.includes('HTTP error! status: 404');
+  const dataError = data?.success === false && !data.error?.includes('暂无代理');
 
   return {
     agents: data?.success ? data.data?.agents || [] : [],
     total: data?.success ? data.data?.total || 0 : 0,
     loading: isLoading,
-    error: data?.success === false ? data.error : error?.message,
+    error: (hasRealError || dataError) ? (data?.error || error?.message) : null,
     refresh: mutate,
   };
 }

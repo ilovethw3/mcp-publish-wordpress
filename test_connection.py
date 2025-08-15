@@ -9,12 +9,16 @@ and responding to MCP protocol messages.
 import asyncio
 import aiohttp
 import logging
+import os
 from datetime import datetime
 from mcp_wordpress.core.config import settings
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+# Test configuration - Use Web UI agent key from environment
+TEST_AGENT_KEY = os.getenv('WEB_UI_AGENT_API_KEY', os.getenv('TEST_AGENT_KEY', 'webui_vs6VPQa4qkopdwbBJZMjNRwIRwnYqBm2279yN0mRXec'))
 
 
 async def test_http_connectivity(url: str = "http://localhost:8000") -> bool:
@@ -46,6 +50,7 @@ async def test_sse_endpoint(url: str = None) -> bool:
             headers = {
                 'Accept': 'text/event-stream',
                 'Cache-Control': 'no-cache',
+                'Authorization': f'Bearer {TEST_AGENT_KEY}',
             }
             async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=5)) as response:
                 logger.info(f"✅ SSE endpoint accessible - Status: {response.status}")
@@ -71,9 +76,10 @@ async def test_mcp_client_connection() -> bool:
         
         logger.info("✅ MCP client libraries imported successfully")
         
-        # Test actual connection
+        # Test actual connection with Bearer Token
         try:
-            async with sse_client(f"http://localhost:{settings.mcp_port}{settings.mcp_sse_path}") as (read_stream, write_stream):
+            headers = {"Authorization": f"Bearer {TEST_AGENT_KEY}"}
+            async with sse_client(f"http://localhost:{settings.mcp_port}{settings.mcp_sse_path}", headers=headers) as (read_stream, write_stream):
                 async with ClientSession(read_stream, write_stream) as session:
                     await session.initialize()
                     logger.info("✅ MCP SSE client connected successfully")
@@ -142,6 +148,7 @@ async def main():
     """Run all connection tests."""
     logger.info("🧪 Starting MCP SSE Connection Tests")
     logger.info("=" * 50)
+    logger.info(f"🔑 Using test agent key: {TEST_AGENT_KEY[:20]}...")  # Only show first 20 chars for security
     
     tests = [
         ("Docker Services", test_docker_services()),

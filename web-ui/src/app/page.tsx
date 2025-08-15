@@ -82,30 +82,30 @@ const Dashboard = () => {
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium text-gray-600">总体状态</span>
-                    <StatusBadge status={systemHealth.system_status} />
+                    <StatusBadge status={systemHealth?.system_status || 'unknown'} />
                   </div>
                   <div className="grid grid-cols-2 gap-4 text-sm">
                     <div>
                       <div className="text-gray-600">最近1小时提交</div>
-                      <div className="font-semibold">{systemHealth.activity_metrics.submissions_last_hour}</div>
+                      <div className="font-semibold">{systemHealth?.activity_metrics?.submissions_last_hour || 0}</div>
                     </div>
                     <div>
                       <div className="text-gray-600">最近24小时提交</div>
-                      <div className="font-semibold">{systemHealth.activity_metrics.submissions_last_24h}</div>
+                      <div className="font-semibold">{systemHealth?.activity_metrics?.submissions_last_24h || 0}</div>
                     </div>
                     <div>
                       <div className="text-gray-600">活跃代理（24h）</div>
-                      <div className="font-semibold">{systemHealth.activity_metrics.active_agents_24h}</div>
+                      <div className="font-semibold">{systemHealth?.activity_metrics?.active_agents_24h || 0}</div>
                     </div>
                     <div>
                       <div className="text-gray-600">活跃站点（24h）</div>
-                      <div className="font-semibold">{systemHealth.activity_metrics.active_sites_24h}</div>
+                      <div className="font-semibold">{systemHealth?.activity_metrics?.active_sites_24h || 0}</div>
                     </div>
                   </div>
                   <div className="border-t pt-4">
                     <div className="text-sm text-gray-600">发布成功率（24h）</div>
                     <div className="text-2xl font-bold text-green-600">
-                      {(100 - systemHealth.publishing_metrics.failure_rate_percent).toFixed(1)}%
+                      {(100 - (systemHealth?.publishing_metrics?.failure_rate_percent || 0)).toFixed(1)}%
                     </div>
                   </div>
                 </div>
@@ -132,22 +132,22 @@ const Dashboard = () => {
                   <div className="grid grid-cols-2 gap-4 text-sm">
                     <div>
                       <div className="text-gray-600">活跃会话</div>
-                      <div className="font-semibold">{securityStatus.active_sessions}</div>
+                      <div className="font-semibold">{securityStatus?.active_sessions || 0}</div>
                     </div>
                     <div>
                       <div className="text-gray-600">锁定代理</div>
-                      <div className="font-semibold">{securityStatus.rate_limiting.locked_agents}</div>
+                      <div className="font-semibold">{securityStatus?.rate_limiting?.locked_agents || 0}</div>
                     </div>
                   </div>
-                  {securityStatus.audit_summary && (
+                  {securityStatus?.audit_summary && (
                     <div className="border-t pt-4">
                       <div className="text-sm text-gray-600">安全事件成功率（24h）</div>
                       <div className="text-2xl font-bold text-green-600">
-                        {securityStatus.audit_summary.success_rate.toFixed(1)}%
+                        {securityStatus?.audit_summary?.success_rate?.toFixed(1) || '0.0'}%
                       </div>
                       <div className="text-xs text-gray-500 mt-1">
-                        总事件: {securityStatus.audit_summary.total_events}，
-                        失败: {securityStatus.audit_summary.failed_events}
+                        总事件: {securityStatus?.audit_summary?.total_events || 0}，
+                        失败: {securityStatus?.audit_summary?.failed_events || 0}
                       </div>
                     </div>
                   )}

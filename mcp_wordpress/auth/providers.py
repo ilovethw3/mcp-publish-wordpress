@@ -7,10 +7,11 @@ for multi-agent API key authentication.
 
 import logging
 from typing import Optional, List
-from fastmcp.server.auth import BearerAuthProvider
+from fastmcp.server.auth import TokenVerifier
 from fastmcp.server.dependencies import AccessToken
+from starlette.requests import Request
 
-from mcp_wordpress.config.agents import AgentConfigManager
+from mcp_wordpress.services.config_service import config_service
 from mcp_wordpress.auth.validators import AgentKeyValidator
 from mcp_wordpress.core.errors import AuthenticationError
 
@@ -18,16 +19,48 @@ from mcp_wordpress.core.errors import AuthenticationError
 logger = logging.getLogger(__name__)
 
 
-class MultiAgentAuthProvider(BearerAuthProvider):
+class DevelopmentModeAuthProvider(TokenVerifier):
+    """开发模式认证提供者 - 允许所有请求"""
+    
+    def __init__(self):
+        super().__init__(resource_server_url=None)
+        self.logger = logging.getLogger(__name__)
+    
+    async def verify_token(self, request: Request) -> Optional[AccessToken]:
+        """开发模式：创建虚拟访问令牌"""
+        self.logger.warning("⚠️ 开发模式：使用虚拟访问令牌")
+        
+        # 无论请求是否有Authorization头，都返回虚拟令牌 (FastMCP 2.11.x 兼容格式)
+        return AccessToken(
+            token="dev-token",  # FastMCP 2.11.x 要求必须提供token参数
+            client_id="dev-agent",
+            scopes=["*"],  # 开发模式拥有所有权限
+            metadata={
+                "agent_name": "开发模式代理",
+                "role": "development",
+                "description": "开发模式虚拟代理"
+            }
+        )
+    
+    async def extract_token(self, request: Request) -> Optional[str]:
+        """开发模式：总是返回虚拟令牌字符串"""
+        return "dev-token"
+
+
+class MultiAgentAuthProvider(TokenVerifier):
     """Multi-agent authentication provider
     
-    Integrates with FastMCP's BearerAuthProvider to provide API key
-    authentication for multiple AI agents.
+    Integrates with FastMCP's BearerAuthProvider to provide database-based
+    API key authentication for multiple AI agents.
     """
     
-    def __init__(self, config_manager: AgentConfigManager):
-        self.config_manager = config_manager
+    def __init__(self):
+        super().__init__(resource_server_url=None)
         self.validator = AgentKeyValidator()
+        
+    async def verify_token(self, token: str) -> Optional[AccessToken]:
+        """FastMCP 2.11.2 兼容性: verify_token 方法"""
+        return await self.validate_token(token)
         
     async def validate_token(self, token: str) -> Optional[AccessToken]:
         """验证代理API密钥并返回访问令牌
@@ -39,66 +72,89 @@ class MultiAgentAuthProvider(BearerAuthProvider):
             AccessToken: 如果验证成功返回访问令牌，否则返回None
         """
         try:
-            # 查找匹配的代理
-            agent_id = self.config_manager.validate_api_key(token)
+            print(f"🔐 DEBUG: MultiAgentAuthProvider.validate_token - 收到token: {token[:10] if token else 'None'}...")
+            logger.debug(f"开始验证API密钥: {token[:10]}...")
+            
+            # 使用数据库服务查找匹配的代理
+            agent_id = await config_service.validate_api_key(token)
+            print(f"🔐 DEBUG: 密钥验证结果 - agent_id: {agent_id}")
+            logger.debug(f"密钥验证结果 - agent_id: {agent_id}")
+            
             if not agent_id:
+                print("🔐 DEBUG: 收到无效的API密钥尝试")
                 logger.warning("收到无效的API密钥尝试")
                 return None
             
             # 获取代理配置
-            agent_config = self.config_manager.get_agent(agent_id)
-            if not agent_config:
-                logger.error(f"代理配置不存在: {agent_id}")
+            try:
+                agent = await config_service.get_agent(agent_id)
+            except Exception as e:
+                logger.error(f"获取代理配置失败: {e}")
                 return None
             
-            # 创建访问令牌
+            # 创建访问令牌 (FastMCP 2.11.x 兼容格式)
             access_token = AccessToken(
-                client_id=agent_config.id,
-                scopes=self._get_agent_scopes(agent_config.role),
+                token=token,  # FastMCP 2.11.x 要求必须提供token参数
+                client_id=agent.id,
+                scopes=self._get_agent_scopes(agent),
                 metadata={
-                    "agent_name": agent_config.name,
-                    "role": agent_config.role,
-                    "description": agent_config.description
+                    "agent_name": agent.name,
+                    "agent_id": agent.id,
+                    "role": "multi-agent",
+                    "description": f"多代理认证: {agent.name}",
+                    "permissions": agent.permissions
                 }
             )
             
-            logger.info(f"代理认证成功: {agent_config.name} ({agent_config.id})")
+            logger.info(f"代理认证成功: {agent.name} ({agent.id})")
             return access_token
             
         except Exception as e:
             logger.error(f"认证过程发生错误: {e}")
             return None
     
-    def _get_agent_scopes(self, role: str) -> List[str]:
-        """根据代理角色获取权限范围
+    def _get_agent_scopes(self, agent) -> List[str]:
+        """根据代理权限配置获取权限范围
         
         Args:
-            role: 代理角色
+            agent: Agent 模型实例
             
         Returns:
             List[str]: 权限范围列表
         """
-        # v2.1采用简化权限模型 - 所有代理具有相同的基础权限
-        base_scopes = [
-            "article:submit",
+        # v2.1基于权限配置的动态范围
+        scopes = []
+        
+        permissions = agent.permissions
+        
+        # 基础权限
+        if permissions.get("can_submit_articles", False):
+            scopes.append("article:submit")
+        if permissions.get("can_edit_own_articles", False):
+            scopes.append("article:edit")
+        if permissions.get("can_delete_own_articles", False):
+            scopes.append("article:delete")
+        if permissions.get("can_view_statistics", False):
+            scopes.append("article:statistics")
+        
+        # 审核权限
+        if permissions.get("can_approve_articles", False):
+            scopes.append("article:approve")
+        if permissions.get("can_reject_articles", False):
+            scopes.append("article:reject")
+        
+        # 通用读取权限
+        scopes.extend([
             "article:read",
-            "article:list",
+            "article:list", 
             "agent:read",
             "site:read"
-        ]
+        ])
         
-        # 特殊角色可能有额外权限
-        if role == "reviewer" or role == "admin":
-            base_scopes.extend([
-                "article:review",
-                "article:approve",
-                "article:reject"
-            ])
-        
-        return base_scopes
+        return scopes
 
 
-class LegacyEnvironmentAuthProvider(BearerAuthProvider):
+class LegacyEnvironmentAuthProvider(TokenVerifier):
     """Legacy environment variable authentication provider
     
     Provides backward compatibility for single-agent setups using
@@ -106,9 +162,14 @@ class LegacyEnvironmentAuthProvider(BearerAuthProvider):
     """
     
     def __init__(self, api_key: str, agent_id: str = "legacy-agent"):
+        super().__init__(resource_server_url=None)
         self.api_key = api_key
         self.agent_id = agent_id
         self.validator = AgentKeyValidator()
+        
+    async def verify_token(self, token: str) -> Optional[AccessToken]:
+        """FastMCP 2.11.2 兼容性: verify_token 方法"""
+        return await self.validate_token(token)
         
     async def validate_token(self, token: str) -> Optional[AccessToken]:
         """验证传统环境变量API密钥
@@ -123,6 +184,7 @@ class LegacyEnvironmentAuthProvider(BearerAuthProvider):
             return None
         
         return AccessToken(
+            token=token,  # 原始令牌
             client_id=self.agent_id,
             scopes=[
                 "article:submit",
@@ -140,3 +202,5 @@ class LegacyEnvironmentAuthProvider(BearerAuthProvider):
                 "description": "从环境变量配置的传统代理"
             }
         )
+
+

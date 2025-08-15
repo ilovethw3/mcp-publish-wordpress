@@ -227,8 +227,28 @@ export function useSiteConfig() {
 
   const testSiteConnection = useCallback(async (siteId: string) => {
     try {
-      const response = await fetch(`/api/config/sites/${siteId}`, {
+      // First get the site data
+      const siteResponse = await fetch(`/api/config/sites/${siteId}`);
+      if (!siteResponse.ok) {
+        throw new Error('Failed to fetch site data');
+      }
+      
+      const siteResult = await siteResponse.json();
+      if (!siteResult.success) {
+        throw new Error(siteResult.error || 'Failed to fetch site data');
+      }
+      
+      const site = siteResult.data;
+      
+      // Then test the connection using the site's WordPress config
+      const response = await fetch('/api/config/sites/test-connection', {
         method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          wordpress_config: site.wordpress_config
+        }),
       });
 
       const result = await response.json();

@@ -127,9 +127,11 @@ const SiteFormModal: React.FC<SiteFormModalProps> = ({
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          api_url: formData.wordpress_config.api_url,
-          username: formData.wordpress_config.username,
-          app_password: formData.wordpress_config.app_password,
+          wordpress_config: {
+            api_url: formData.wordpress_config.api_url,
+            username: formData.wordpress_config.username,
+            app_password: formData.wordpress_config.app_password,
+          }
         }),
       });
 
@@ -145,17 +147,19 @@ const SiteFormModal: React.FC<SiteFormModalProps> = ({
     }
   };
 
-  if (!isOpen) return null;
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-      <Dialog open={isOpen} onClose={onClose}>
-        <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto mx-4">
+    <Dialog open={isOpen} onClose={onClose} className="relative z-50">
+      {/* Background backdrop */}
+      <div className="fixed inset-0 bg-black/25" aria-hidden="true" />
+      
+      {/* Container to center the panel */}
+      <div className="fixed inset-0 flex items-center justify-center p-4">
+        <Dialog.Panel className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-xl">
           <div className="p-6 border-b border-gray-200">
             <div className="flex justify-between items-center">
-              <h2 className="text-xl font-semibold text-gray-900">
+              <Dialog.Title className="text-xl font-semibold text-gray-900">
                 {site ? '编辑站点' : '添加站点'}
-              </h2>
+              </Dialog.Title>
               <Button variant="outline" onClick={onClose}>
                 <X className="w-4 h-4" />
               </Button>
@@ -314,9 +318,9 @@ const SiteFormModal: React.FC<SiteFormModalProps> = ({
               </Button>
             </div>
           </form>
-        </div>
-      </Dialog>
-    </div>
+        </Dialog.Panel>
+      </div>
+    </Dialog>
   );
 };
 

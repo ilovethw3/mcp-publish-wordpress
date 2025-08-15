@@ -10,13 +10,56 @@ import bleach
 
 from mcp_wordpress.core.database import get_session
 from mcp_wordpress.core.wordpress import WordPressClient
-from mcp_wordpress.core.multi_site_publisher import MultiSitePublisher
 from mcp_wordpress.core.errors import (
     ArticleNotFoundError, InvalidStatusError, WordPressError, 
     ValidationError, create_mcp_success, MCPError, MCPErrorCodes
 )
 from mcp_wordpress.models.article import Article, ArticleStatus
-from mcp_wordpress.config.sites import SiteConfigManager
+from mcp_wordpress.models.site import Site
+
+
+async def get_site_config(session, site_id: str = None) -> dict:
+    """Get WordPress configuration from database site.
+    
+    Args:
+        session: Database session
+        site_id: Site ID, if None uses first active site
+        
+    Returns:
+        Dictionary with api_url, username, app_password
+        
+    Raises:
+        ValueError: If no site found or site not configured
+    """
+    if site_id:
+        # Get specific site
+        result = await session.execute(select(Site).where(Site.id == site_id))
+        site = result.scalars().first()
+        
+        if not site:
+            raise ValueError(f"Site not found: {site_id}")
+    else:
+        # Get first active site as default
+        result = await session.execute(
+            select(Site).where(Site.status == "active").order_by(Site.created_at)
+        )
+        site = result.scalars().first()
+        
+        if not site:
+            raise ValueError("No active WordPress sites configured. Please add a site through Web UI.")
+    
+    if not site.is_active:
+        raise ValueError(f"Site {site.id} is not active")
+    
+    wp_config = site.wordpress_config
+    if not wp_config or not wp_config.get("api_url") or not wp_config.get("username") or not wp_config.get("app_password"):
+        raise ValueError(f"Site {site.id} WordPress configuration is incomplete")
+    
+    return {
+        "api_url": wp_config["api_url"],
+        "username": wp_config["username"], 
+        "app_password": wp_config["app_password"]
+    }
 
 
 def register_article_tools(mcp: FastMCP):
@@ -28,24 +71,24 @@ def register_article_tools(mcp: FastMCP):
         return {"status": "ok", "message": "MCP server is working"}
     
     @mcp.tool(
-        description="Submit a new article for review with multi-agent and multi-site support"
+        description="Submit a new article for review with multi-agent support"
     )
     async def submit_article(
         title: str,
         content_markdown: str,
         tags: str = "",
         category: str = "",
-        target_site: str = "",
         agent_metadata: Optional[Dict[str, Any]] = None
     ) -> str:
-        """Submit a new article for review with v2.1 multi-agent and multi-site support.
+        """Submit a new article for review with v2.1 multi-agent support.
+        
+        Site selection will be done during approval/publishing phase.
         
         Args:
             title: Article title (max 200 characters)
             content_markdown: Article content in Markdown format
             tags: Comma-separated tags (optional)
             category: Article category (optional)
-            target_site: Target WordPress site ID for publishing (optional)
             agent_metadata: Additional metadata from submitting agent (optional)
             
         Returns:
@@ -63,7 +106,7 @@ def register_article_tools(mcp: FastMCP):
             # Get submitting agent information from access token
             access_token = get_access_token()
             agent_id = access_token.client_id if access_token else None
-            agent_name = access_token.metadata.get("agent_name") if access_token and access_token.metadata else None
+            agent_name = getattr(access_token, 'metadata', {}).get("agent_name") if access_token else None
             
             # Sanitize content for XSS protection
             clean_content = bleach.clean(
@@ -78,11 +121,11 @@ def register_article_tools(mcp: FastMCP):
                     content_markdown=clean_content,
                     tags=tags.strip() if tags else None,
                     category=category.strip() if category else None,
-                    status=ArticleStatus.PENDING_REVIEW,
+                    status=ArticleStatus.PENDING_REVIEW.value,
                     # v2.1新增字段
                     submitting_agent_id=agent_id,
                     submitting_agent_name=agent_name,
-                    target_site_id=target_site.strip() if target_site else None,
+                    target_site_id=None,  # 站点选择将在审批时进行
                     agent_metadata=json.dumps(agent_metadata) if agent_metadata else None
                 )
                 
@@ -97,8 +140,7 @@ def register_article_tools(mcp: FastMCP):
                         "id": article.submitting_agent_id,
                         "name": article.submitting_agent_name
                     } if article.submitting_agent_id else None,
-                    "target_site_id": article.target_site_id,
-                    "message": "Article submitted successfully for review"
+                    "message": "Article submitted successfully for review. Site selection will be done during approval."
                 })
         except (ValidationError, ArticleNotFoundError, InvalidStatusError) as e:
             return e.to_json()
@@ -222,6 +264,8 @@ def register_article_tools(mcp: FastMCP):
                 return create_mcp_success({
                     "article_id": article.id,
                     "title": article.title,
+                    "content_markdown": article.content_markdown,
+                    "content_html": article.content_html,
                     "status": article.status,
                     "tags": article.tags,
                     "category": article.category,
@@ -231,7 +275,19 @@ def register_article_tools(mcp: FastMCP):
                     "rejection_reason": article.rejection_reason,
                     "wordpress_post_id": article.wordpress_post_id,
                     "wordpress_permalink": article.wordpress_permalink,
-                    "publish_error_message": article.publish_error_message
+                    "publish_error_message": article.publish_error_message,
+                    # v2.1多代理支持字段
+                    "submitting_agent": {
+                        "id": article.submitting_agent_id,
+                        "name": article.submitting_agent_name
+                    } if article.submitting_agent_id else None,
+                    "agent_metadata": article.agent_metadata,
+                    "publishing_agent_id": article.publishing_agent_id,
+                    # v2.1多站点支持字段
+                    "target_site": {
+                        "id": article.target_site_id,
+                        "name": article.target_site_name
+                    } if article.target_site_id else None
                 })
         except (ArticleNotFoundError, InvalidStatusError) as e:
             return e.to_json()
@@ -240,22 +296,27 @@ def register_article_tools(mcp: FastMCP):
             return error.to_json()
     
     @mcp.tool(
-        description="Approve article and start WordPress publishing"
+        description="Approve article without publishing (审批通过，但不发布)"
     )
-    async def approve_article(
+    async def approve_article_only(
         article_id: int,
         reviewer_notes: str = ""
     ) -> str:
-        """Approve article and start WordPress publishing.
+        """Approve article without publishing to WordPress.
         
         Args:
             article_id: ID of the article to approve
             reviewer_notes: Optional notes from the reviewer
             
         Returns:
-            JSON string with approval status and WordPress publishing result
+            JSON string with approval status
         """
         try:
+            # Get approving agent information from access token
+            access_token = get_access_token()
+            approving_agent_id = access_token.client_id if access_token else None
+            approving_agent_name = getattr(access_token, 'metadata', {}).get("agent_name") if access_token else None
+            
             async with get_session() as session:
                 result = await session.execute(select(Article).where(Article.id == article_id))
                 article = result.scalars().first()
@@ -263,20 +324,113 @@ def register_article_tools(mcp: FastMCP):
                 if not article:
                     raise ArticleNotFoundError(article_id)
                 
-                if article.status != ArticleStatus.PENDING_REVIEW:
-                    raise InvalidStatusError(article.status, ArticleStatus.PENDING_REVIEW)
+                if article.status != ArticleStatus.PENDING_REVIEW.value:
+                    raise InvalidStatusError(article.status, ArticleStatus.PENDING_REVIEW.value)
                 
-                # Update article status to publishing
-                article.status = ArticleStatus.PUBLISHING
+                # Update article status to approved (不发布)
+                article.status = ArticleStatus.APPROVED.value
                 article.reviewer_notes = reviewer_notes
                 article.updated_at = datetime.now(timezone.utc)
+                
+                # 记录审批者信息
+                if approving_agent_id:
+                    article.publishing_agent_id = approving_agent_id
+                
+                session.add(article)
+                await session.commit()
+                
+                return create_mcp_success({
+                    "article_id": article.id,
+                    "status": article.status,
+                    "reviewer_notes": reviewer_notes,
+                    "approving_agent": {
+                        "id": approving_agent_id,
+                        "name": approving_agent_name
+                    } if approving_agent_id else None,
+                    "message": "Article approved successfully. Ready for publishing."
+                })
+        except (ArticleNotFoundError, InvalidStatusError) as e:
+            return e.to_json()
+        except Exception as e:
+            error = MCPError(MCPErrorCodes.INTERNAL_ERROR, str(e))
+            return error.to_json()
+    
+    @mcp.tool(
+        description="Publish approved article to specified WordPress site"
+    )
+    async def publish_article(
+        article_id: int,
+        target_site_id: str,
+        notes: str = ""
+    ) -> str:
+        """Publish approved article to specified WordPress site.
+        
+        可以发布approved状态的文章，或重试发布publish_failed状态的文章。
+        
+        Args:
+            article_id: ID of the article to publish
+            target_site_id: ID of the WordPress site to publish to
+            notes: Optional notes for publishing/retry
+            
+        Returns:
+            JSON string with publishing result
+        """
+        try:
+            # Get publishing agent information from access token
+            access_token = get_access_token()
+            publishing_agent_id = access_token.client_id if access_token else None
+            publishing_agent_name = getattr(access_token, 'metadata', {}).get("agent_name") if access_token else None
+            
+            async with get_session() as session:
+                result = await session.execute(select(Article).where(Article.id == article_id))
+                article = result.scalars().first()
+                
+                if not article:
+                    raise ArticleNotFoundError(article_id)
+                
+                # 只允许approved或publish_failed状态的文章发布
+                if article.status not in [ArticleStatus.APPROVED.value, ArticleStatus.PUBLISH_FAILED.value]:
+                    raise InvalidStatusError(article.status, f"{ArticleStatus.APPROVED.value} or {ArticleStatus.PUBLISH_FAILED.value}")
+                
+                # Get site information first to validate it exists
+                site_result = await session.execute(select(Site).where(Site.id == target_site_id))
+                target_site = site_result.scalars().first()
+                
+                if not target_site:
+                    raise ValueError(f"Site not found: {target_site_id}")
+                
+                # Update article status to publishing and set target site
+                article.status = ArticleStatus.PUBLISHING.value
+                article.target_site_id = target_site_id
+                article.target_site_name = target_site.name
+                article.updated_at = datetime.now(timezone.utc)
+                
+                # 清除之前的发布错误信息
+                article.publish_error_message = None
+                
+                # 记录发布者信息和备注
+                if publishing_agent_id:
+                    article.publishing_agent_id = publishing_agent_id
+                if notes:
+                    # 如果有审核备注，追加发布备注
+                    if article.reviewer_notes:
+                        article.reviewer_notes += f"\n\n发布备注: {notes}"
+                    else:
+                        article.reviewer_notes = f"发布备注: {notes}"
                 
                 session.add(article)
                 await session.commit()
                 
                 # Attempt WordPress publishing
                 try:
-                    wp_client = WordPressClient()
+                    # Get WordPress configuration from database using the specified site
+                    site_config = await get_site_config(session, target_site_id)
+                    
+                    wp_client = WordPressClient(
+                        api_url=site_config["api_url"],
+                        username=site_config["username"],
+                        app_password=site_config["app_password"]
+                    )
                     wp_result = await wp_client.create_post(
                         title=article.title,
                         content_markdown=article.content_markdown,
@@ -285,7 +439,7 @@ def register_article_tools(mcp: FastMCP):
                     )
                     
                     # Update article with WordPress info
-                    article.status = ArticleStatus.PUBLISHED
+                    article.status = ArticleStatus.PUBLISHED.value
                     article.wordpress_post_id = wp_result["id"]
                     article.wordpress_permalink = wp_result.get("link")
                     article.updated_at = datetime.now(timezone.utc)
@@ -293,30 +447,159 @@ def register_article_tools(mcp: FastMCP):
                     session.add(article)
                     await session.commit()
                     
-                    return json.dumps({
+                    return create_mcp_success({
                         "article_id": article.id,
                         "status": "published",
                         "wordpress_post_id": wp_result["id"],
                         "wordpress_permalink": wp_result.get("link"),
-                        "message": "Article approved and published successfully"
+                        "target_site": {
+                            "id": target_site_id,
+                            "name": target_site.name
+                        },
+                        "publishing_agent": {
+                            "id": publishing_agent_id,
+                            "name": publishing_agent_name
+                        } if publishing_agent_id else None,
+                        "message": "Article published successfully to WordPress"
                     })
                     
                 except Exception as e:
                     # Update article status to failed
-                    article.status = ArticleStatus.PUBLISH_FAILED
+                    article.status = ArticleStatus.PUBLISH_FAILED.value
                     article.publish_error_message = str(e)
                     article.updated_at = datetime.now(timezone.utc)
                     
                     session.add(article)
                     await session.commit()
                     
-                    return json.dumps({
+                    return create_mcp_success({
                         "article_id": article.id,
                         "status": "publish_failed",
                         "error": str(e),
-                        "message": "Article approved but WordPress publishing failed"
+                        "target_site": {
+                            "id": target_site_id,
+                            "name": target_site.name
+                        },
+                        "message": "WordPress publishing failed. You can retry later."
                     })
         except (ArticleNotFoundError, InvalidStatusError) as e:
+            return e.to_json()
+        except Exception as e:
+            error = MCPError(MCPErrorCodes.INTERNAL_ERROR, str(e))
+            return error.to_json()
+    
+    @mcp.tool(
+        description="Edit article content and metadata"
+    )
+    async def edit_article(
+        article_id: int,
+        title: str = None,
+        content_markdown: str = None,
+        tags: str = None,
+        category: str = None
+    ) -> str:
+        """Edit article content and metadata.
+        
+        允许修改pending_review或approved状态的文章。
+        
+        Args:
+            article_id: ID of the article to edit
+            title: New title (optional)
+            content_markdown: New content in Markdown format (optional)
+            tags: New tags (optional)
+            category: New category (optional)
+            
+        Returns:
+            JSON string with edit result
+        """
+        try:
+            # Get editing agent information from access token
+            access_token = get_access_token()
+            editing_agent_id = access_token.client_id if access_token else None
+            editing_agent_name = getattr(access_token, 'metadata', {}).get("agent_name") if access_token else None
+            
+            async with get_session() as session:
+                result = await session.execute(select(Article).where(Article.id == article_id))
+                article = result.scalars().first()
+                
+                if not article:
+                    raise ArticleNotFoundError(article_id)
+                
+                # 只允许编辑pending_review或approved状态的文章
+                if article.status not in [ArticleStatus.PENDING_REVIEW.value, ArticleStatus.APPROVED.value]:
+                    raise InvalidStatusError(article.status, f"{ArticleStatus.PENDING_REVIEW.value} or {ArticleStatus.APPROVED.value}")
+                
+                # 检查权限：只允许原作者或有权限的Agent编辑
+                if editing_agent_id and editing_agent_id != article.submitting_agent_id:
+                    # 这里应该检查Agent权限，暂时允许所有Agent编辑
+                    pass
+                
+                # 记录修改前的值用于历史记录
+                changes = {}
+                
+                # 更新字段（如果提供了新值）
+                if title is not None and title.strip():
+                    if len(title) > 200:
+                        raise ValidationError("title", "Title cannot exceed 200 characters")
+                    if article.title != title.strip():
+                        changes["title"] = {"from": article.title, "to": title.strip()}
+                        article.title = title.strip()
+                
+                if content_markdown is not None and content_markdown.strip():
+                    # 清理内容
+                    clean_content = bleach.clean(
+                        content_markdown,
+                        tags=['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'br', 'strong', 'em', 'ul', 'ol', 'li', 'a', 'code', 'pre'],
+                        attributes={'a': ['href', 'title']}
+                    )
+                    if article.content_markdown != clean_content:
+                        changes["content_markdown"] = {"from": "原内容", "to": "新内容"}  # 不记录全文，太长
+                        article.content_markdown = clean_content
+                
+                if tags is not None:
+                    new_tags = tags.strip() if tags else None
+                    if article.tags != new_tags:
+                        changes["tags"] = {"from": article.tags, "to": new_tags}
+                        article.tags = new_tags
+                
+                if category is not None:
+                    new_category = category.strip() if category else None
+                    if article.category != new_category:
+                        changes["category"] = {"from": article.category, "to": new_category}
+                        article.category = new_category
+                
+                # 如果没有任何变更
+                if not changes:
+                    return create_mcp_success({
+                        "article_id": article.id,
+                        "status": article.status,
+                        "message": "No changes were made to the article."
+                    })
+                
+                # 更新时间戳
+                article.updated_at = datetime.now(timezone.utc)
+                
+                # 记录修改历史（简化版本，实际应该有专门的修改历史表）
+                if article.reviewer_notes:
+                    article.reviewer_notes += f"\n\n修改记录 ({datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')} by {editing_agent_name or editing_agent_id or 'Unknown'}): {len(changes)}个字段被修改"
+                else:
+                    article.reviewer_notes = f"修改记录 ({datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')} by {editing_agent_name or editing_agent_id or 'Unknown'}): {len(changes)}个字段被修改"
+                
+                session.add(article)
+                await session.commit()
+                await session.refresh(article)
+                
+                return create_mcp_success({
+                    "article_id": article.id,
+                    "status": article.status,
+                    "changes": changes,
+                    "editing_agent": {
+                        "id": editing_agent_id,
+                        "name": editing_agent_name
+                    } if editing_agent_id else None,
+                    "message": f"Article updated successfully. {len(changes)} fields modified."
+                })
+        except (ArticleNotFoundError, InvalidStatusError, ValidationError) as e:
             return e.to_json()
         except Exception as e:
             error = MCPError(MCPErrorCodes.INTERNAL_ERROR, str(e))
@@ -346,11 +629,11 @@ def register_article_tools(mcp: FastMCP):
                 if not article:
                     raise ArticleNotFoundError(article_id)
                 
-                if article.status != ArticleStatus.PENDING_REVIEW:
-                    raise InvalidStatusError(article.status, ArticleStatus.PENDING_REVIEW)
+                if article.status != ArticleStatus.PENDING_REVIEW.value:
+                    raise InvalidStatusError(article.status, ArticleStatus.PENDING_REVIEW.value)
                 
                 # Update article status to rejected
-                article.status = ArticleStatus.REJECTED
+                article.status = ArticleStatus.REJECTED.value
                 article.rejection_reason = rejection_reason
                 article.updated_at = datetime.now(timezone.utc)
                 
@@ -399,7 +682,7 @@ def register_article_tools(mcp: FastMCP):
                         # 获取代理统计信息
                         stats_query = select(
                             func.count(Article.id).label('total_articles'),
-                            func.count().filter(Article.status == ArticleStatus.PUBLISHED).label('published_articles'),
+                            func.count().filter(Article.status == ArticleStatus.PUBLISHED.value).label('published_articles'),
                             func.max(Article.created_at).label('last_submission')
                         ).where(Article.submitting_agent_id == agent_id)
                         
@@ -453,8 +736,8 @@ def register_article_tools(mcp: FastMCP):
                         # 获取站点统计信息
                         stats_query = select(
                             func.count(Article.id).label('total_articles'),
-                            func.count().filter(Article.status == ArticleStatus.PUBLISHED).label('published_articles'),
-                            func.max(Article.updated_at).filter(Article.status == ArticleStatus.PUBLISHED).label('last_publish')
+                            func.count().filter(Article.status == ArticleStatus.PUBLISHED.value).label('published_articles'),
+                            func.max(Article.updated_at).filter(Article.status == ArticleStatus.PUBLISHED.value).label('last_publish')
                         ).where(Article.target_site_id == site_id)
                         
                         stats_result = await session.execute(stats_query)
@@ -498,9 +781,9 @@ def register_article_tools(mcp: FastMCP):
                 # 基础统计
                 base_stats_query = select(
                     func.count(Article.id).label('total_submitted'),
-                    func.count().filter(Article.status == ArticleStatus.PUBLISHED).label('total_published'),
-                    func.count().filter(Article.status == ArticleStatus.REJECTED).label('total_rejected'),
-                    func.count().filter(Article.status == ArticleStatus.PENDING_REVIEW).label('pending_review'),
+                    func.count().filter(Article.status == ArticleStatus.PUBLISHED.value).label('total_published'),
+                    func.count().filter(Article.status == ArticleStatus.REJECTED.value).label('total_rejected'),
+                    func.count().filter(Article.status == ArticleStatus.PENDING_REVIEW.value).label('pending_review'),
                     func.min(Article.created_at).label('first_submission'),
                     func.max(Article.created_at).label('last_submission')
                 ).where(Article.submitting_agent_id == agent_id)
@@ -559,9 +842,9 @@ def register_article_tools(mcp: FastMCP):
                 stats_query = select(
                     func.count(Article.id).label('total_articles'),
                     func.count().filter(Article.status == ArticleStatus.PUBLISHED).label('published_articles'),
-                    func.count().filter(Article.status == ArticleStatus.PUBLISH_FAILED).label('failed_articles'),
-                    func.max(Article.updated_at).filter(Article.status == ArticleStatus.PUBLISHED).label('last_successful_publish'),
-                    func.max(Article.updated_at).filter(Article.status == ArticleStatus.PUBLISH_FAILED).label('last_failed_publish')
+                    func.count().filter(Article.status == ArticleStatus.PUBLISH_FAILED.value).label('failed_articles'),
+                    func.max(Article.updated_at).filter(Article.status == ArticleStatus.PUBLISHED.value).label('last_successful_publish'),
+                    func.max(Article.updated_at).filter(Article.status == ArticleStatus.PUBLISH_FAILED.value).label('last_failed_publish')
                 ).where(Article.target_site_id == site_id)
                 
                 stats_result = await session.execute(stats_query)

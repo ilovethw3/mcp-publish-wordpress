@@ -8,6 +8,7 @@ This script tests the SSE MCP server by connecting to it and testing various fun
 import asyncio
 import json
 import logging
+import os
 from datetime import datetime
 from typing import Dict, List, Any
 from mcp_wordpress.core.config import settings
@@ -15,6 +16,9 @@ from mcp_wordpress.core.config import settings
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Test configuration - Use Web UI agent key from environment
+TEST_AGENT_KEY = os.getenv('WEB_UI_AGENT_API_KEY', os.getenv('TEST_AGENT_KEY', 'webui_vs6VPQa4qkopdwbBJZMjNRwIRwnYqBm2279yN0mRXec'))
 
 try:
     from mcp import ClientSession
@@ -38,7 +42,8 @@ class MCPTestClient:
         """Connect to the MCP server."""
         try:
             logger.info(f"Connecting to MCP server at {self.server_url}")
-            self.client = sse_client(self.server_url)
+            headers = {"Authorization": f"Bearer {TEST_AGENT_KEY}"}
+            self.client = sse_client(self.server_url, headers=headers)
             self.read_stream, self.write_stream = await self.client.__aenter__()
             self.session = ClientSession(self.read_stream, self.write_stream)
             await self.session.__aenter__()

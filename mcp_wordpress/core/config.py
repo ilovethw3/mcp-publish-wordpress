@@ -25,19 +25,12 @@ class Settings(BaseSettings):
     jwt_secret_key: str = Field(..., description="JWT secret key for authentication tokens")
     encryption_key: Optional[str] = Field(None, description="Encryption key for sensitive data")
     
-    # Multi-Agent Configuration
-    multi_agent_mode: bool = Field(default=True, description="Enable multi-agent support")
-    agent_config_path: str = Field(default="/app/config/agents.yml", description="Path to agents configuration file")
+    # Multi-Agent and Multi-Site Configuration (Database-backed)
+    # Note: Multi-agent and multi-site features are always enabled in v2.1+
+    # Configuration is managed through the database and Web UI interface
     
-    # Multi-Site Configuration  
-    multi_site_mode: bool = Field(default=True, description="Enable multi-site support")
-    site_config_path: str = Field(default="/app/config/sites.yml", description="Path to sites configuration file")
-    
-    # Legacy WordPress Configuration (Optional for backward compatibility)
-    wordpress_api_url: Optional[str] = Field(None, description="Legacy: WordPress REST API base URL")
-    wordpress_username: Optional[str] = Field(None, description="Legacy: WordPress username")
-    wordpress_app_password: Optional[str] = Field(None, description="Legacy: WordPress application password")
-    agent_api_key: Optional[str] = Field(None, description="Legacy: Single agent API key")
+    # WordPress Configuration: Now managed through database sites
+    # Use Web UI to configure WordPress sites and credentials
     
     # Logging and Monitoring Configuration
     debug: bool = False
@@ -48,6 +41,9 @@ class Settings(BaseSettings):
     # Rate Limiting and Security Features
     enable_rate_limiting: bool = Field(default=True, description="Enable rate limiting")
     enable_api_versioning: bool = Field(default=True, description="Enable API versioning")
+    
+    # Development and Fallback Configuration
+    development_mode: bool = Field(default=False, description="Enable development mode (allows running without agents)")
     
     model_config = {
         "env_file": ".env", 

@@ -8,9 +8,11 @@ and authentication event auditing.
 import logging
 from typing import Dict, Any, Optional
 from datetime import datetime, timezone
-from fastmcp.server.middleware import Middleware
+from fastmcp.server.middleware import Middleware, MiddlewareContext, CallNext
 from fastmcp.server.dependencies import get_access_token
 from fastmcp.exceptions import ToolError
+from fastmcp.tools.tool import ToolResult
+import mcp.types as mt
 
 from mcp_wordpress.core.errors import AuthenticationError, AuthorizationError
 from mcp_wordpress.core.security import SecurityManager
@@ -45,40 +47,46 @@ class AuthenticationMiddleware(Middleware):
     
     async def on_call_tool(
         self, 
-        name: str, 
-        arguments: Dict[str, Any], 
-        **kwargs
-    ) -> None:
+        context: MiddlewareContext[mt.CallToolRequestParams],
+        call_next: CallNext[mt.CallToolRequestParams, ToolResult]
+    ) -> ToolResult:
         """工具调用前的权限检查
         
         Args:
-            name: 工具名称
-            arguments: 工具参数
-            **kwargs: 其他参数
+            context: 中间件上下文，包含工具调用请求参数
+            call_next: 调用下一个中间件或工具的函数
+            
+        Returns:
+            ToolResult: 工具执行结果
             
         Raises:
             ToolError: 当权限不足或认证失败时
         """
+        # 从上下文中提取工具名称和参数
+        name = context.message.name
+        arguments = context.message.arguments or {}
+        
+        # 开发模式检查 - 跳过认证
+        from mcp_wordpress.core.config import settings
+        if settings.development_mode:
+            logger.warning(f"⚠️  开发模式：跳过工具 '{name}' 的认证检查")
+            return await call_next(context)
+        
         try:
             # 获取访问令牌
             access_token = get_access_token()
             if not access_token:
                 await self._log_auth_failure(name, "未提供访问令牌")
-                raise ToolError(
-                    code=-40001,
-                    message="认证失败: 未提供有效的访问令牌"
-                )
+                raise ToolError("认证失败: 未提供有效的访问令牌")
             
             # 安全管理器认证检查
             security_manager = SecurityManager.get_instance()
-            agent_name = access_token.metadata.get("agent_name") if access_token.metadata else None
+            # FastMCP 2.11.x: AccessToken没有metadata属性，使用client_id作为agent标识
+            agent_name = access_token.client_id
             
             if not await security_manager.authenticate_request(access_token.client_id, agent_name or "unknown"):
                 await self._log_auth_failure(name, "安全管理器拒绝请求", access_token.client_id)
-                raise ToolError(
-                    code=-40429,
-                    message="请求被安全策略阻止（可能是速率限制）"
-                )
+                raise ToolError("请求被安全策略阻止（可能是速率限制）")
             
             # 检查工具权限要求
             required_scopes = self.tool_permissions.get(name, [])
@@ -90,10 +98,7 @@ class AuthenticationMiddleware(Middleware):
                         f"权限不足，缺少范围: {missing_scopes}",
                         access_token.client_id
                     )
-                    raise ToolError(
-                        code=-40003,
-                        message=f"权限不足: 需要权限范围 {missing_scopes}"
-                    )
+                    raise ToolError(f"权限不足: 需要权限范围 {missing_scopes}")
             
             # 记录成功的工具调用
             await self._log_tool_access(name, access_token.client_id, arguments)
@@ -107,16 +112,16 @@ class AuthenticationMiddleware(Middleware):
                 details={"arguments_count": len(arguments)}
             )
             
+            # 权限检查通过，调用下一个中间件或工具
+            return await call_next(context)
+            
         except ToolError:
             # 重新抛出ToolError
             raise
         except Exception as e:
             # 处理其他异常
             logger.error(f"认证中间件处理错误: {e}")
-            raise ToolError(
-                code=-32603,
-                message="内部认证错误"
-            )
+            raise ToolError("内部认证错误")
     
     def _check_permissions(self, access_token, required_scopes: list) -> list:
         """检查访问令牌是否具有所需权限

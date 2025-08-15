@@ -140,7 +140,7 @@ const AgentFormModal: React.FC<AgentFormModalProps> = ({
       newErrors.id = '代理ID只能包含字母、数字、连字符和下划线';
     }
 
-    if (!formData.api_key.trim()) {
+    if (!formData.api_key?.trim()) {
       newErrors.api_key = 'API密钥为必填项';
     }
 

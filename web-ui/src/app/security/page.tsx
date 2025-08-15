@@ -295,7 +295,7 @@ const SecurityPage = () => {
                     <div className="grid grid-cols-2 gap-4 text-sm">
                       <div>
                         <span className="text-gray-600">锁定代理:</span>
-                        <span className="ml-2 font-semibold">{securityStatus.rate_limiting.locked_agents}</span>
+                        <span className="ml-2 font-semibold">{securityStatus.rate_limiting?.locked_agents || 0}</span>
                       </div>
                       <div>
                         <span className="text-gray-600">总违规次数:</span>
@@ -310,11 +310,11 @@ const SecurityPage = () => {
                     <div className="grid grid-cols-2 gap-4 text-sm">
                       <div>
                         <span className="text-gray-600">活跃会话:</span>
-                        <span className="ml-2 font-semibold">{securityStatus.active_sessions}</span>
+                        <span className="ml-2 font-semibold">{securityStatus.active_sessions || 0}</span>
                       </div>
                       <div>
                         <span className="text-gray-600">锁定时长:</span>
-                        <span className="ml-2 font-semibold">{securityStatus.rate_limiting.lockout_duration_minutes}分钟</span>
+                        <span className="ml-2 font-semibold">{securityStatus.rate_limiting?.lockout_duration_minutes || 0}分钟</span>
                       </div>
                     </div>
                   </div>
@@ -326,19 +326,19 @@ const SecurityPage = () => {
                       <div className="grid grid-cols-2 gap-4 text-sm">
                         <div>
                           <span className="text-gray-600">总事件:</span>
-                          <span className="ml-2 font-semibold">{securityStatus.audit_summary.total_events}</span>
+                          <span className="ml-2 font-semibold">{securityStatus.audit_summary?.total_events || 0}</span>
                         </div>
                         <div>
                           <span className="text-gray-600">成功率:</span>
-                          <span className="ml-2 font-semibold">{securityStatus.audit_summary.success_rate.toFixed(1)}%</span>
+                          <span className="ml-2 font-semibold">{securityStatus.audit_summary?.success_rate?.toFixed(1) || '0.0'}%</span>
                         </div>
                         <div>
                           <span className="text-gray-600">失败事件:</span>
-                          <span className="ml-2 font-semibold">{securityStatus.audit_summary.failed_events}</span>
+                          <span className="ml-2 font-semibold">{securityStatus.audit_summary?.failed_events || 0}</span>
                         </div>
                         <div>
                           <span className="text-gray-600">可疑活动:</span>
-                          <span className="ml-2 font-semibold">{securityStatus.audit_summary.failed_events || 0}</span>
+                          <span className="ml-2 font-semibold">{securityStatus.audit_summary?.failed_events || 0}</span>
                         </div>
                       </div>
                     </div>

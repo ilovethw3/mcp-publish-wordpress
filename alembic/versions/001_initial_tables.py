@@ -27,7 +27,7 @@ def upgrade() -> None:
         sa.Column('content_markdown', sa.Text(), nullable=False),
         sa.Column('tags', sqlmodel.sql.sqltypes.AutoString(length=500), nullable=True),
         sa.Column('category', sqlmodel.sql.sqltypes.AutoString(length=100), nullable=True),
-        sa.Column('status', sa.Enum('SUBMITTED', 'UNDER_REVIEW', 'APPROVED', 'REJECTED', 'PUBLISHED', 'PUBLISH_FAILED', name='articlestatus'), nullable=False),
+        sa.Column('status', sa.Enum('pending_review', 'publishing', 'published', 'publish_failed', 'rejected', name='articlestatus'), nullable=False),
         sa.Column('submitted_by', sqlmodel.sql.sqltypes.AutoString(length=100), nullable=False),
         sa.Column('submitted_at', sa.DateTime(timezone=True), nullable=False),
         sa.Column('reviewed_by', sqlmodel.sql.sqltypes.AutoString(length=100), nullable=True),

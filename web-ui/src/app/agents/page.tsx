@@ -17,8 +17,8 @@ import { Plus, Edit, Trash2 } from 'lucide-react';
 
 // 类型转换辅助函数
 const agentToFullConfigAgent = (agent: Agent): FullConfigAgent | null => {
-  // 只有当配置字段存在时才能转换为FullConfigAgent
-  if (!agent.description || !agent.api_key || !agent.rate_limit || !agent.permissions || !agent.notifications) {
+  // 检查是否有必需的配置字段（来自数据库的代理应该有完整配置）
+  if (!agent.rate_limit || !agent.permissions || !agent.notifications) {
     return null;
   }
   
@@ -26,12 +26,16 @@ const agentToFullConfigAgent = (agent: Agent): FullConfigAgent | null => {
     id: agent.id,
     name: agent.name,
     status: agent.status,
-    description: agent.description,
-    api_key: agent.api_key,
+    description: agent.description || '',
     rate_limit: agent.rate_limit,
     permissions: agent.permissions,
     notifications: agent.notifications,
+    total_articles_submitted: agent.total_articles_submitted,
+    total_articles_published: agent.total_articles_published,
+    total_articles_rejected: agent.total_articles_rejected,
+    success_rate: agent.success_rate,
     created_at: agent.created_at,
+    updated_at: agent.updated_at,
   };
 };
 
@@ -67,20 +71,20 @@ const AgentDetailModal: React.FC<AgentDetailModalProps> = ({ agent, isOpen, onCl
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <StatsCard
               title="总提交数"
-              value={agent.statistics.total_articles}
+              value={agent.total_articles_submitted || 0}
               color="primary"
               loading={false}
             />
             <StatsCard
               title="发布成功"
-              value={agent.statistics.published_articles}
+              value={agent.total_articles_published || 0}
               color="success"
               loading={false}
             />
             <StatsCard
               title="成功率"
-              value={`${agent.statistics.success_rate}%`}
-              color={agent.statistics.success_rate >= 80 ? 'success' : 'warning'}
+              value={`${agent.success_rate || 0}%`}
+              color={(agent.success_rate || 0) >= 80 ? 'success' : 'warning'}
               loading={false}
             />
           </div>
@@ -99,17 +103,19 @@ const AgentDetailModal: React.FC<AgentDetailModalProps> = ({ agent, isOpen, onCl
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                   <div>
                     <div className="text-gray-600">待审核</div>
-                    <div className="font-semibold">{stats.statistics?.pending_review || 0}</div>
+                    <div className="font-semibold">{stats?.statistics?.pending_review || 0}</div>
                   </div>
                   <div>
                     <div className="text-gray-600">已拒绝</div>
-                    <div className="font-semibold">{stats.statistics?.total_rejected || 0}</div>
+                    <div className="font-semibold">{stats?.statistics?.total_rejected || agent.total_articles_rejected || 0}</div>
                   </div>
                   <div>
                     <div className="text-gray-600">首次提交</div>
                     <div className="font-semibold">
-                      {stats.statistics?.first_submission 
+                      {stats?.statistics?.first_submission 
                         ? new Date(stats.statistics.first_submission).toLocaleDateString('zh-CN')
+                        : agent.created_at
+                        ? new Date(agent.created_at).toLocaleDateString('zh-CN')
                         : '-'
                       }
                     </div>
@@ -117,8 +123,10 @@ const AgentDetailModal: React.FC<AgentDetailModalProps> = ({ agent, isOpen, onCl
                   <div>
                     <div className="text-gray-600">最近提交</div>
                     <div className="font-semibold">
-                      {stats.statistics?.last_submission
+                      {stats?.statistics?.last_submission
                         ? new Date(stats.statistics.last_submission).toLocaleDateString('zh-CN')
+                        : agent.updated_at
+                        ? new Date(agent.updated_at).toLocaleDateString('zh-CN')
                         : '-'
                       }
                     </div>
@@ -208,21 +216,19 @@ const AgentsPage = () => {
     (ca: any) => !agents.find(a => a.id === ca.id)
   ).map((ca: any) => ({
     ...ca,
-    statistics: {
-      total_articles: 0,
-      published_articles: 0,
-      success_rate: 0,
-      last_submission: null,
-    }
+    total_articles_submitted: 0,
+    total_articles_published: 0,
+    total_articles_rejected: 0,
+    success_rate: 0,
   }));
 
   const allAgents = [...mergedAgents, ...configOnlyAgents];
   
   const activeAgents = allAgents.filter(agent => agent.status === 'active');
-  const totalArticles = allAgents.reduce((sum, agent) => sum + (agent.statistics?.total_articles || 0), 0);
-  const totalPublished = allAgents.reduce((sum, agent) => sum + (agent.statistics?.published_articles || 0), 0);
+  const totalArticles = allAgents.reduce((sum, agent) => sum + (agent.total_articles_submitted || 0), 0);
+  const totalPublished = allAgents.reduce((sum, agent) => sum + (agent.total_articles_published || 0), 0);
   const averageSuccessRate = allAgents.length > 0 
-    ? allAgents.reduce((sum, agent) => sum + (agent.statistics?.success_rate || 0), 0) / allAgents.length 
+    ? allAgents.reduce((sum, agent) => sum + (Number(agent.success_rate) || 0), 0) / allAgents.length 
     : 0;
 
   // Handlers
@@ -417,20 +423,20 @@ const AgentsPage = () => {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="text-sm text-gray-900">
-                            总计: {agent.statistics?.total_articles || 0}
+                            总计: {agent.total_articles_submitted || 0}
                           </div>
                           <div className="text-sm text-gray-500">
-                            已发布: {agent.statistics?.published_articles || 0}
+                            已发布: {agent.total_articles_published || 0}
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="text-sm text-gray-900">
-                            {(agent.statistics?.success_rate || 0).toFixed(1)}%
+                            {(Number(agent.success_rate) || 0).toFixed(1)}%
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {agent.statistics?.last_submission
-                            ? new Date(agent.statistics.last_submission).toLocaleDateString('zh-CN')
+                          {agent.updated_at
+                            ? new Date(agent.updated_at).toLocaleDateString('zh-CN')
                             : '-'
                           }
                         </td>

@@ -7,8 +7,8 @@ from fastmcp import FastMCP
 
 from mcp_wordpress.core.database import get_session
 from mcp_wordpress.core.wordpress import WordPressClient
-from mcp_wordpress.core.config import settings
 from mcp_wordpress.models.article import Article, ArticleStatus
+from mcp_wordpress.models.site import Site
 
 
 def register_stats_resources(mcp: FastMCP):
@@ -16,25 +16,80 @@ def register_stats_resources(mcp: FastMCP):
     
     @mcp.resource("wordpress://config")
     async def get_wordpress_config() -> str:
-        """Get WordPress site configuration information."""
-        wp_client = WordPressClient()
-        
-        try:
-            # Test connection
-            is_connected = await wp_client.test_connection()
-            
-            return json.dumps({
-                "api_base": "/".join(settings.wordpress_api_url.split("/")[:-2]),  # 只暴露主域名
-                "connection_status": "connected" if is_connected else "disconnected",
-                "last_checked": datetime.now(timezone.utc).isoformat()
-            })
-        except Exception as e:
-            return json.dumps({
-                "api_base": "/".join(settings.wordpress_api_url.split("/")[:-2]),  # 只暴露主域名
-                "connection_status": "error",
-                "error_message": "Connection failed",  # 不暴露具体错误信息
-                "last_checked": datetime.now(timezone.utc).isoformat()
-            })
+        """Get WordPress sites configuration information from database."""
+        async with get_session() as session:
+            try:
+                # Get all active sites
+                result = await session.execute(
+                    select(Site).where(Site.status == "active").order_by(Site.created_at)
+                )
+                sites = result.scalars().all()
+                
+                if not sites:
+                    return json.dumps({
+                        "total_sites": 0,
+                        "active_sites": 0,
+                        "connection_status": "no_sites_configured",
+                        "last_checked": datetime.now(timezone.utc).isoformat(),
+                        "message": "No active WordPress sites configured"
+                    })
+                
+                # Test connection for each site
+                site_statuses = []
+                connected_sites = 0
+                
+                for site in sites:
+                    try:
+                        wp_config = site.wordpress_config
+                        if wp_config and wp_config.get("api_url") and wp_config.get("username") and wp_config.get("app_password"):
+                            wp_client = WordPressClient(
+                                api_url=wp_config["api_url"],
+                                username=wp_config["username"], 
+                                app_password=wp_config["app_password"]
+                            )
+                            is_connected = await wp_client.test_connection()
+                            await wp_client.close()
+                            
+                            if is_connected:
+                                connected_sites += 1
+                                
+                            site_statuses.append({
+                                "site_id": site.id,
+                                "site_name": site.name,
+                                "api_base": "/".join(wp_config["api_url"].split("/")[:-2]),  # Only expose main domain
+                                "connection_status": "connected" if is_connected else "disconnected"
+                            })
+                        else:
+                            site_statuses.append({
+                                "site_id": site.id,
+                                "site_name": site.name,
+                                "api_base": "not_configured",
+                                "connection_status": "incomplete_config"
+                            })
+                    except Exception:
+                        site_statuses.append({
+                            "site_id": site.id,
+                            "site_name": site.name,
+                            "api_base": "error", 
+                            "connection_status": "connection_error"
+                        })
+                
+                return json.dumps({
+                    "total_sites": len(sites),
+                    "active_sites": len(sites),
+                    "connected_sites": connected_sites,
+                    "connection_status": "healthy" if connected_sites == len(sites) else "partial" if connected_sites > 0 else "failed",
+                    "sites": site_statuses,
+                    "last_checked": datetime.now(timezone.utc).isoformat()
+                })
+            except Exception as e:
+                return json.dumps({
+                    "total_sites": 0,
+                    "active_sites": 0,
+                    "connection_status": "error",
+                    "error_message": "Database connection failed",  # Don't expose specific error
+                    "last_checked": datetime.now(timezone.utc).isoformat()
+                })
     
     @mcp.resource("stats://summary")
     async def get_stats_summary() -> str:
@@ -72,7 +127,7 @@ def register_stats_resources(mcp: FastMCP):
         async with get_session() as session:
             # Calculate average processing time for published articles
             published_articles = await session.execute(
-                select(Article).where(Article.status == ArticleStatus.PUBLISHED)
+                select(Article).where(Article.status == ArticleStatus.PUBLISHED.value)
             )
             articles = published_articles.scalars().all()
             
@@ -91,15 +146,15 @@ def register_stats_resources(mcp: FastMCP):
             total_attempted = await session.execute(
                 select(func.count(Article.id)).where(
                     Article.status.in_([
-                        ArticleStatus.PUBLISHED, 
-                        ArticleStatus.PUBLISH_FAILED
+                        ArticleStatus.PUBLISHED.value, 
+                        ArticleStatus.PUBLISH_FAILED.value
                     ])
                 )
             )
             total_attempted_count = total_attempted.scalar() or 0
             
             published_count = await session.execute(
-                select(func.count(Article.id)).where(Article.status == ArticleStatus.PUBLISHED)
+                select(func.count(Article.id)).where(Article.status == ArticleStatus.PUBLISHED.value)
             )
             published_count_result = published_count.scalar() or 0
             
@@ -123,9 +178,9 @@ def register_stats_resources(mcp: FastMCP):
                 Article.submitting_agent_id,
                 Article.submitting_agent_name,
                 func.count(Article.id).label("total_submitted"),
-                func.count().filter(Article.status == ArticleStatus.PUBLISHED).label("published"),
-                func.count().filter(Article.status == ArticleStatus.REJECTED).label("rejected"),
-                func.count().filter(Article.status == ArticleStatus.PENDING_REVIEW).label("pending"),
+                func.count().filter(Article.status == ArticleStatus.PUBLISHED.value).label("published"),
+                func.count().filter(Article.status == ArticleStatus.REJECTED.value).label("rejected"),
+                func.count().filter(Article.status == ArticleStatus.PENDING_REVIEW.value).label("pending"),
                 func.min(Article.created_at).label("first_submission"),
                 func.max(Article.created_at).label("last_submission")
             ).where(
@@ -185,10 +240,10 @@ def register_stats_resources(mcp: FastMCP):
                 Article.target_site_id,
                 Article.target_site_name,
                 func.count(Article.id).label("total_articles"),
-                func.count().filter(Article.status == ArticleStatus.PUBLISHED).label("published"),
-                func.count().filter(Article.status == ArticleStatus.PUBLISH_FAILED).label("failed"),
-                func.max(Article.updated_at).filter(Article.status == ArticleStatus.PUBLISHED).label("last_success"),
-                func.max(Article.updated_at).filter(Article.status == ArticleStatus.PUBLISH_FAILED).label("last_failure")
+                func.count().filter(Article.status == ArticleStatus.PUBLISHED.value).label("published"),
+                func.count().filter(Article.status == ArticleStatus.PUBLISH_FAILED.value).label("failed"),
+                func.max(Article.updated_at).filter(Article.status == ArticleStatus.PUBLISHED.value).label("last_success"),
+                func.max(Article.updated_at).filter(Article.status == ArticleStatus.PUBLISH_FAILED.value).label("last_failure")
             ).where(
                 Article.target_site_id.isnot(None)
             ).group_by(
@@ -285,7 +340,7 @@ def register_stats_resources(mcp: FastMCP):
                 select(func.count(func.distinct(Article.target_site_id))).where(
                     Article.updated_at >= day_ago,
                     Article.target_site_id.isnot(None),
-                    Article.status == ArticleStatus.PUBLISHED
+                    Article.status == ArticleStatus.PUBLISHED.value
                 )
             )
             active_sites_24h = active_sites.scalar() or 0
@@ -294,7 +349,7 @@ def register_stats_resources(mcp: FastMCP):
             failed_publishes = await session.execute(
                 select(func.count(Article.id)).where(
                     Article.updated_at >= day_ago,
-                    Article.status == ArticleStatus.PUBLISH_FAILED
+                    Article.status == ArticleStatus.PUBLISH_FAILED.value
                 )
             )
             failed_24h = failed_publishes.scalar() or 0
@@ -302,7 +357,7 @@ def register_stats_resources(mcp: FastMCP):
             successful_publishes = await session.execute(
                 select(func.count(Article.id)).where(
                     Article.updated_at >= day_ago,
-                    Article.status == ArticleStatus.PUBLISHED
+                    Article.status == ArticleStatus.PUBLISHED.value
                 )
             )
             successful_24h = successful_publishes.scalar() or 0

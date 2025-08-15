@@ -12,6 +12,7 @@ interface StatusBadgeProps {
 const statusLabels: Record<string, string> = {
   'published': '已发布',
   'pending_review': '待审核',
+  'approved': '已通过',
   'publishing': '发布中',
   'rejected': '已拒绝',
   'publish_failed': '发布失败',
@@ -27,6 +28,7 @@ const statusLabels: Record<string, string> = {
 const statusVariants: Record<string, 'success' | 'warning' | 'error' | 'secondary'> = {
   'published': 'success',
   'pending_review': 'warning',
+  'approved': 'success',
   'publishing': 'secondary',
   'rejected': 'error',
   'publish_failed': 'error',

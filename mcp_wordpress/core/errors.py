@@ -152,6 +152,17 @@ class AuthorizationError(MCPError):
         )
 
 
+class AgentNotFoundError(MCPError):
+    """Agent not found error."""
+    
+    def __init__(self, agent_id: str):
+        super().__init__(
+            code=MCPErrorCodes.INTERNAL_ERROR,
+            message=f"Agent with ID '{agent_id}' not found",
+            data={"agent_id": agent_id}
+        )
+
+
 class SiteNotFoundError(MCPError):
     """Site not found error."""
     

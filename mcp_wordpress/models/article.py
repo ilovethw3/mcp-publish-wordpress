@@ -4,17 +4,21 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional
 from sqlmodel import SQLModel, Field
-from sqlalchemy import Column, DateTime
+from sqlalchemy import Column, DateTime, Enum as SQLEnum
 from sqlalchemy.sql import func
 
 
 class ArticleStatus(str, Enum):
     """Article status enumeration."""
     PENDING_REVIEW = "pending_review"
+    APPROVED = "approved"
     PUBLISHING = "publishing"
     PUBLISHED = "published"
     PUBLISH_FAILED = "publish_failed"
     REJECTED = "rejected"
+    
+    def __str__(self):
+        return self.value
 
 
 class Article(SQLModel, table=True):
@@ -27,7 +31,11 @@ class Article(SQLModel, table=True):
     content_html: Optional[str] = Field(default=None, description="Article content in HTML format")
     tags: Optional[str] = Field(default=None, description="Comma-separated tags")
     category: Optional[str] = Field(default=None, description="Article category")
-    status: ArticleStatus = Field(default=ArticleStatus.PENDING_REVIEW, description="Article status")
+    status: ArticleStatus = Field(
+        default="pending_review", 
+        description="Article status",
+        sa_column=Column(SQLEnum('pending_review', 'approved', 'publishing', 'published', 'publish_failed', 'rejected', name="articlestatus"))
+    )
     
     # WordPress integration fields
     wordpress_post_id: Optional[int] = Field(default=None, description="WordPress post ID")

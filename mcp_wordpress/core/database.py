@@ -36,7 +36,17 @@ AsyncSessionLocal = sessionmaker(
 
 
 def create_db_and_tables():
-    """Create database tables."""
+    """Create database tables.
+    
+    DEPRECATED: This function directly creates tables using SQLModel.metadata.create_all(),
+    which bypasses Alembic migration management. Use 'alembic upgrade head' instead.
+    """
+    import warnings
+    warnings.warn(
+        "create_db_and_tables() is deprecated. Use 'alembic upgrade head' instead.",
+        DeprecationWarning,
+        stacklevel=2
+    )
     SQLModel.metadata.create_all(sync_engine)
 
 

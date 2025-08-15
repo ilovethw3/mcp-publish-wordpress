@@ -13,6 +13,10 @@ interface Toast {
   type: 'success' | 'error' | 'warning' | 'info';
   message: string;
   duration?: number;
+  action?: {
+    label: string;
+    onClick: () => void;
+  };
 }
 
 interface ToastProps {
@@ -63,23 +67,43 @@ const Toast: React.FC<ToastProps> = ({ toast, onRemove }) => {
 
   return (
     <div className={clsx(
-      'flex items-center justify-between p-4 rounded-lg border shadow-lg transition-all duration-300 ease-in-out',
+      'flex flex-col p-4 rounded-lg border shadow-lg transition-all duration-300 ease-in-out',
       'min-w-80 max-w-md',
       getColorClasses()
     )}>
-      <div className="flex items-center space-x-3">
-        <div className="flex-shrink-0">
-          {getIcon()}
+      {/* Header with icon and close button */}
+      <div className="flex items-start justify-between mb-2">
+        <div className="flex items-center space-x-3">
+          <div className="flex-shrink-0">
+            {getIcon()}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium whitespace-pre-line">{toast.message}</p>
+          </div>
         </div>
-        <p className="text-sm font-medium">{toast.message}</p>
+        
+        <button
+          onClick={() => onRemove(toast.id)}
+          className="flex-shrink-0 ml-2 text-gray-400 hover:text-gray-600 transition-colors"
+        >
+          <X className="w-4 h-4" />
+        </button>
       </div>
       
-      <button
-        onClick={() => onRemove(toast.id)}
-        className="flex-shrink-0 ml-4 text-gray-400 hover:text-gray-600 transition-colors"
-      >
-        <X className="w-4 h-4" />
-      </button>
+      {/* Action button if provided */}
+      {toast.action && (
+        <div className="mt-3 flex justify-end">
+          <button
+            onClick={() => {
+              toast.action?.onClick();
+              onRemove(toast.id);
+            }}
+            className="px-3 py-1 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors"
+          >
+            {toast.action.label}
+          </button>
+        </div>
+      )}
     </div>
   );
 };

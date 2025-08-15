@@ -20,7 +20,7 @@ interface MCPAgent extends BaseAgent {
 // 配置Agent（配置管理中的完整数据）
 interface ConfigAgent extends BaseAgent {
   description: string;
-  api_key: string;
+  api_key?: string;
   rate_limit: {
     requests_per_minute: number;
     requests_per_hour: number;
@@ -40,7 +40,38 @@ interface ConfigAgent extends BaseAgent {
     on_publish_success: boolean;
     on_publish_failure: boolean;
   };
+  // 数据库统计字段
+  total_articles_submitted?: number;
+  total_articles_published?: number;
+  total_articles_rejected?: number;
+  success_rate?: number;
   created_at?: string;
+  updated_at?: string;
+}
+
+// 用于创建/编辑代理的表单接口
+interface AgentFormData extends BaseAgent {
+  description: string;
+  api_key?: string; // 创建时生成，编辑时重新生成
+  rate_limit: {
+    requests_per_minute: number;
+    requests_per_hour: number;
+    requests_per_day: number;
+  };
+  permissions: {
+    can_submit_articles: boolean;
+    can_edit_own_articles: boolean;
+    can_delete_own_articles: boolean;
+    can_view_statistics: boolean;
+    allowed_categories: string[];
+    allowed_tags: string[];
+  };
+  notifications: {
+    on_approval: boolean;
+    on_rejection: boolean;
+    on_publish_success: boolean;
+    on_publish_failure: boolean;
+  };
 }
 
 // 完整Agent（支持MCP数据 + 部分配置数据合并）
@@ -48,6 +79,9 @@ export type Agent = MCPAgent & Partial<ConfigAgent>;
 
 // 完整配置Agent（用于表单和配置管理）
 export type FullConfigAgent = BaseAgent & ConfigAgent;
+
+// 导出代理表单数据类型
+export type { AgentFormData };
 
 // 基础Site接口
 interface BaseSite {
@@ -112,6 +146,7 @@ export type FullConfigSite = BaseSite & ConfigSite;
 export interface Article {
   id: number;
   title: string;
+  content_markdown?: string; // Article full content in Markdown format
   status: 'pending_review' | 'publishing' | 'published' | 'rejected' | 'publish_failed';
   tags?: string;
   category?: string;

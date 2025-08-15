@@ -17,7 +17,7 @@ def register_article_resources(mcp: FastMCP):
     async def get_pending_articles() -> str:
         """Get list of articles pending review."""
         async with get_session() as session:
-            query = select(Article).where(Article.status == ArticleStatus.PENDING_REVIEW)
+            query = select(Article).where(Article.status == ArticleStatus.PENDING_REVIEW.value)
             result = await session.execute(query)
             articles = result.scalars().all()
             
@@ -51,7 +51,7 @@ def register_article_resources(mcp: FastMCP):
     async def get_published_articles() -> str:
         """Get list of published articles."""
         async with get_session() as session:
-            query = select(Article).where(Article.status == ArticleStatus.PUBLISHED)
+            query = select(Article).where(Article.status == ArticleStatus.PUBLISHED.value)
             result = await session.execute(query)
             articles = result.scalars().all()
             
@@ -87,7 +87,7 @@ def register_article_resources(mcp: FastMCP):
     async def get_failed_articles() -> str:
         """Get list of articles that failed to publish."""
         async with get_session() as session:
-            query = select(Article).where(Article.status == ArticleStatus.PUBLISH_FAILED)
+            query = select(Article).where(Article.status == ArticleStatus.PUBLISH_FAILED.value)
             result = await session.execute(query)
             articles = result.scalars().all()
             
@@ -175,7 +175,7 @@ def register_article_resources(mcp: FastMCP):
                 Article.submitting_agent_id,
                 Article.submitting_agent_name,
                 func.count(Article.id).label("total_articles"),
-                func.count().filter(Article.status == ArticleStatus.PUBLISHED).label("published_articles"),
+                func.count().filter(Article.status == ArticleStatus.PUBLISHED.value).label("published_articles"),
                 func.max(Article.created_at).label("last_submission")
             ).where(
                 Article.submitting_agent_id.isnot(None)
@@ -217,9 +217,9 @@ def register_article_resources(mcp: FastMCP):
                 Article.target_site_id,
                 Article.target_site_name,
                 func.count(Article.id).label("total_articles"),
-                func.count().filter(Article.status == ArticleStatus.PUBLISHED).label("published_articles"),
-                func.count().filter(Article.status == ArticleStatus.PUBLISH_FAILED).label("failed_articles"),
-                func.max(Article.updated_at).filter(Article.status == ArticleStatus.PUBLISHED).label("last_publish")
+                func.count().filter(Article.status == ArticleStatus.PUBLISHED.value).label("published_articles"),
+                func.count().filter(Article.status == ArticleStatus.PUBLISH_FAILED.value).label("failed_articles"),
+                func.max(Article.updated_at).filter(Article.status == ArticleStatus.PUBLISHED.value).label("last_publish")
             ).where(
                 Article.target_site_id.isnot(None)
             ).group_by(

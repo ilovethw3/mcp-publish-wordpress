@@ -22,6 +22,7 @@ from mcp_wordpress.core.errors import (
     MCPError,
     MCPErrorCodes
 )
+from mcp_wordpress.auth.validators import create_masked_api_key
 
 
 class ConfigService:
@@ -88,6 +89,7 @@ class ConfigService:
             name=name,
             description=description,
             api_key_hash=self._hash_api_key(api_key),
+            api_key_display=create_masked_api_key(api_key),
             status=status,
             rate_limit=rate_limit,
             permissions=permissions,
@@ -137,14 +139,15 @@ class ConfigService:
             # Update fields
             for field, value in updates.items():
                 if field == "api_key":
-                    # Hash the new API key
-                    value = self._hash_api_key(value)
-                    field = "api_key_hash"
+                    # Hash the new API key and create display mask
+                    setattr(agent, "api_key_hash", self._hash_api_key(value))
+                    setattr(agent, "api_key_display", create_masked_api_key(value))
+                    continue
                 
                 if hasattr(agent, field):
                     setattr(agent, field, value)
             
-            agent.updated_at = datetime.now(timezone.utc)
+            agent.updated_at = datetime.utcnow()
             
             try:
                 await session.commit()
@@ -292,7 +295,7 @@ class ConfigService:
                 if hasattr(site, field):
                     setattr(site, field, value)
             
-            site.updated_at = datetime.now(timezone.utc)
+            site.updated_at = datetime.utcnow()
             
             try:
                 await session.commit()

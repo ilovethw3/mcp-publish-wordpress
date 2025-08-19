@@ -42,7 +42,6 @@ class AuthenticationMiddleware(Middleware):
             "get_site_health": ["site:read"],
             # 测试工具权限
             "ping": [],  # 无需特殊权限
-            "test_list_articles": ["article:list"],
         }
     
     async def on_call_tool(

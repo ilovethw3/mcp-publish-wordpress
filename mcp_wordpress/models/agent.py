@@ -22,6 +22,7 @@ class Agent(SQLModel, table=True):
     name: str = Field(max_length=100)
     description: Optional[str] = Field(default=None, max_length=500)
     api_key_hash: str = Field(max_length=255)  # 存储API密钥的哈希值
+    api_key_display: str = Field(default="", max_length=100)  # 掩码显示的API密钥
     status: str = Field(default="active")  # active, inactive, locked
     
     # 速率限制配置
@@ -35,7 +36,6 @@ class Agent(SQLModel, table=True):
     permissions: dict = Field(default_factory=lambda: {
         "can_submit_articles": True,
         "can_edit_own_articles": True,
-        "can_delete_own_articles": False,
         "can_view_statistics": True,
         "can_approve_articles": False,
         "can_publish_articles": False,
@@ -52,6 +52,10 @@ class Agent(SQLModel, table=True):
         "on_publish_success": True,
         "on_publish_failure": True
     }, sa_column=Column(JSON))
+    
+    # 角色模板关联 (v3.0新增)
+    role_template_id: Optional[str] = Field(default=None, foreign_key="role_templates.id", max_length=50)
+    permissions_override: dict = Field(default_factory=dict, sa_column=Column(JSON))
     
     # 统计信息
     total_articles_submitted: int = Field(default=0)

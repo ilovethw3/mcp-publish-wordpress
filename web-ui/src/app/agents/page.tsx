@@ -27,9 +27,13 @@ const agentToFullConfigAgent = (agent: Agent): FullConfigAgent | null => {
     name: agent.name,
     status: agent.status,
     description: agent.description || '',
+    api_key: agent.api_key_display, // 使用掩码显示
+    api_key_display: agent.api_key_display, // 添加掩码字段
     rate_limit: agent.rate_limit,
     permissions: agent.permissions,
     notifications: agent.notifications,
+    role_template_id: agent.role_template_id, // 添加角色模板支持
+    permissions_override: agent.permissions_override,
     total_articles_submitted: agent.total_articles_submitted,
     total_articles_published: agent.total_articles_published,
     total_articles_rejected: agent.total_articles_rejected,
@@ -206,9 +210,28 @@ const AgentsPage = () => {
   const { toasts, showToast, removeToast } = useToast();
 
   // Merge data from both sources (MCP runtime data + configuration data)
+  // Use MCP data for statistics, config data for permissions/settings
   const mergedAgents = agents.map(agent => {
     const configAgent = configAgents.find((ca: any) => ca.id === agent.id);
-    return configAgent ? { ...agent, ...configAgent } : agent;
+    if (configAgent) {
+      // Keep MCP statistics, use config for settings
+      return {
+        ...configAgent, // Start with config data (permissions, etc.)
+        // Override with MCP statistics
+        total_articles_submitted: agent.total_articles_submitted,
+        total_articles_published: agent.total_articles_published,
+        total_articles_rejected: agent.total_articles_rejected,
+        success_rate: agent.success_rate,
+        // Keep config data for critical settings
+        permissions: configAgent.permissions,
+        rate_limit: configAgent.rate_limit,
+        notifications: configAgent.notifications,
+        api_key_display: configAgent.api_key_display,
+        role_template_id: configAgent.role_template_id,
+        permissions_override: configAgent.permissions_override,
+      };
+    }
+    return agent;
   });
 
   // Add config-only agents (that may not have runtime data yet)
@@ -243,6 +266,7 @@ const AgentsPage = () => {
       showToast('error', '无法编辑：代理缺少配置信息');
       return;
     }
+    
     setEditingAgent(configAgent);
     setShowAgentForm(true);
   };
@@ -261,8 +285,12 @@ const AgentsPage = () => {
         await createAgent(agentData);
         showToast('success', '代理创建成功');
       }
-      refresh(); // Refresh MCP data
-      refreshConfig(); // Refresh config data
+      
+      // Force refresh both data sources
+      await Promise.all([
+        refresh(), // Refresh MCP data
+        refreshConfig() // Refresh config data
+      ]);
     } catch (error) {
       showToast('error', `操作失败: ${error instanceof Error ? error.message : '未知错误'}`);
       throw error;
@@ -389,6 +417,9 @@ const AgentsPage = () => {
                         代理信息
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        API密钥
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         状态
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -416,6 +447,11 @@ const AgentsPage = () => {
                             <div className="text-sm text-gray-500">
                               ID: {agent.id}
                             </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm font-mono text-gray-700">
+                            {agent.api_key_display || '未设置'}
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">

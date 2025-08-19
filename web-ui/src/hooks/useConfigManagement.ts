@@ -97,7 +97,9 @@ export function useAgentConfig() {
         throw new Error(result.error || 'Failed to update agent');
       }
 
-      mutate(); // Refresh data
+      // Force refresh with revalidate option
+      await mutate(undefined, { revalidate: true });
+      
       return result;
     } catch (error) {
       console.error('Failed to update agent:', error);

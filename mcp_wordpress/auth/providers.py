@@ -12,7 +12,7 @@ from fastmcp.server.dependencies import AccessToken
 from starlette.requests import Request
 
 from mcp_wordpress.services.config_service import config_service
-from mcp_wordpress.auth.validators import AgentKeyValidator
+from mcp_wordpress.auth.validators import secure_compare
 from mcp_wordpress.core.errors import AuthenticationError
 
 
@@ -56,7 +56,6 @@ class MultiAgentAuthProvider(TokenVerifier):
     
     def __init__(self):
         super().__init__(resource_server_url=None)
-        self.validator = AgentKeyValidator()
         
     async def verify_token(self, token: str) -> Optional[AccessToken]:
         """FastMCP 2.11.2 兼容性: verify_token 方法"""
@@ -165,7 +164,6 @@ class LegacyEnvironmentAuthProvider(TokenVerifier):
         super().__init__(resource_server_url=None)
         self.api_key = api_key
         self.agent_id = agent_id
-        self.validator = AgentKeyValidator()
         
     async def verify_token(self, token: str) -> Optional[AccessToken]:
         """FastMCP 2.11.2 兼容性: verify_token 方法"""
@@ -180,7 +178,7 @@ class LegacyEnvironmentAuthProvider(TokenVerifier):
         Returns:
             AccessToken: 如果验证成功返回访问令牌，否则返回None
         """
-        if not self.validator.secure_compare(token, self.api_key):
+        if not secure_compare(token, self.api_key):
             return None
         
         return AccessToken(

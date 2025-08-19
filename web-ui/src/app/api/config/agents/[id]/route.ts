@@ -52,6 +52,7 @@ export async function PUT(
     const { id } = params;
     const body = await request.json();
     
+    
     // Validate input
     const errors = validateAgentData(body);
     if (errors.length > 0) {

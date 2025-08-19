@@ -392,7 +392,7 @@ const ArticlesPage = () => {
       // 使用新的分离工作流MCP工具
       if (action === 'approve_only') {
         console.log(`[ARTICLES-PAGE] 🔐 使用MCP工具审批文章 ${articleId}`);
-        const response = await fetch('/api/mcp-proxy/approve-article-only', {
+        const response = await fetch('/api/mcp-proxy/approve-article', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

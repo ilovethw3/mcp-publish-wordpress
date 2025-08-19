@@ -179,6 +179,7 @@ export async function POST(request: NextRequest) {
 - **Agent**: Multi-agent authentication with rate limiting and permissions
 - **Site**: Multi-WordPress site configuration with publishing rules
 - **Article**: Content workflow with status tracking and multi-site targeting
+- **RoleTemplate**: Role-based permission system for agents (v2.1+)
 
 ### Critical ORM Usage
 - **NEVER use `session.exec()`** - Use `session.execute()` instead
@@ -291,6 +292,7 @@ except Exception as e:
 - Timezone errors → Don't manually set timestamps, use model defaults
 - Database doesn't exist → Use `python init_production_db.py --force-clean`
 - Schema out of sync → Run `alembic upgrade head` or use `--force-clean` for major changes
+- Role template duplicate name errors → Enforced at application layer, not database constraints
 
 ### MCP Protocol Issues
 - Tools returning `None` → Ensure JSON string returns, not objects
@@ -417,6 +419,32 @@ export async function GET() {
 }
 ```
 
+## Role Template System (v2.1+)
+
+### Architecture Principle
+Role templates are managed **exclusively through the Web UI**. The MCP server only provides:
+- `initialize_system_roles()` - Creates default system roles during database initialization
+- `get_effective_permissions()` - Retrieves computed permissions for agents
+
+### Role Template Management
+```typescript
+// Web UI handles all CRUD operations via direct database access
+import { createRoleTemplate, updateRoleTemplate } from '@/lib/database/role-templates';
+
+// Built-in validation prevents duplicate role names
+const role = await createRoleTemplate({
+  name: "Custom Content Creator",  // Must be unique among active roles
+  permissions: { can_submit_articles: true },
+  // ... other fields
+});
+```
+
+### System Roles (Auto-Created)
+- `content_creator` - Basic article submission rights
+- `content_reviewer` - Article approval and editing rights  
+- `content_publisher` - WordPress publishing rights
+- `content_manager` - Full administrative rights
+
 ## Critical Development Guidelines
 
 ### Article Status Workflow
@@ -430,6 +458,7 @@ publishing → [Failure] → publish_failed → [Retry with Site Selection]
 - **Articles**: `target_site_id` is null during submission, set during approval
 - **Agents**: String IDs with JSON configuration for rate limits and permissions  
 - **Sites**: String IDs with embedded WordPress configuration and publishing rules
+- **RoleTemplates**: System and custom roles with unique names (enforced at application layer)
 - **Multi-site Support**: Articles can be retried to different sites if publishing fails
 
 ### Error Handling Patterns

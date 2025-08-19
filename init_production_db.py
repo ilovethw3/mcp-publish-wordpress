@@ -21,6 +21,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from mcp_wordpress.core.database import get_session
 from mcp_wordpress.core.config import settings
 from mcp_wordpress.services.config_service import config_service
+from mcp_wordpress.services.role_template_service import role_template_service
 from sqlalchemy import text
 
 logging.basicConfig(
@@ -230,7 +231,7 @@ async def clean_database():
     async with get_session() as session:
         try:
             # 删除业务数据（保留表结构）
-            tables_to_clean = ['articles', 'agents', 'sites', 'users']
+            tables_to_clean = ['articles', 'agents', 'sites', 'users', 'role_templates', 'role_template_history']
             
             for table in tables_to_clean:
                 try:
@@ -272,7 +273,7 @@ async def drop_all_tables():
     try:
         async with get_session() as session:
             # 删除所有业务表
-            tables_to_drop = ['articles', 'agents', 'sites', 'users']
+            tables_to_drop = ['articles', 'agents', 'sites', 'users', 'role_templates', 'role_template_history']
             
             for table in tables_to_drop:
                 try:
@@ -324,6 +325,15 @@ async def create_essential_config():
     """创建必要的系统配置"""
     logger.info("⚙️ 创建必要的系统配置...")
     
+    # 初始化系统角色模板
+    logger.info("📋 初始化系统角色模板...")
+    try:
+        await role_template_service.initialize_system_roles()
+        logger.info("✅ 系统角色模板初始化完成")
+    except Exception as e:
+        logger.error(f"❌ 系统角色模板初始化失败: {e}")
+        return False
+    
     # 注意：站点配置现在通过 Web UI 界面管理，不再创建默认站点
     # 用户可以在 Web UI 中根据实际需要创建和配置 WordPress 站点
     
@@ -369,6 +379,7 @@ async def create_webui_agent():
                 "can_view_statistics": True,
                 "can_approve_articles": True,  # 关键：审批权限
                 "can_reject_articles": True,   # 关键：拒绝权限
+                "can_publish_articles": True,  # 关键：发布权限
                 "allowed_categories": [],
                 "allowed_tags": []
             },

@@ -152,6 +152,20 @@ class AuthorizationError(MCPError):
         )
 
 
+class PermissionDeniedError(MCPError):
+    """Permission denied error for role-based access control."""
+    
+    def __init__(self, message: str = "Permission denied", required_permission: str = None, agent_id: str = None):
+        super().__init__(
+            code=MCPErrorCodes.AUTH_FAILED,
+            message=message,
+            data={
+                "required_permission": required_permission,
+                "agent_id": agent_id
+            } if required_permission or agent_id else None
+        )
+
+
 class AgentNotFoundError(MCPError):
     """Agent not found error."""
     

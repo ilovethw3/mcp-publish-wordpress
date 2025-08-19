@@ -67,8 +67,11 @@ export async function POST(request: NextRequest) {
       permissions: {
         can_submit_articles: body.permissions?.can_submit_articles ?? true,
         can_edit_own_articles: body.permissions?.can_edit_own_articles ?? true,
-        can_delete_own_articles: body.permissions?.can_delete_own_articles ?? false,
+        can_edit_others_articles: body.permissions?.can_edit_others_articles ?? false,
+        can_approve_articles: body.permissions?.can_approve_articles ?? false,
+        can_publish_articles: body.permissions?.can_publish_articles ?? false,
         can_view_statistics: body.permissions?.can_view_statistics ?? true,
+        can_review_agents: body.permissions?.can_review_agents || [],
         allowed_categories: body.permissions?.allowed_categories || [],
         allowed_tags: body.permissions?.allowed_tags || [],
       },

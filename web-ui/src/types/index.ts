@@ -5,6 +5,7 @@ interface BaseAgent {
   id: string;
   name: string;
   status: 'active' | 'inactive' | 'locked';
+  api_key_display?: string; // 掩码显示的API密钥（所有Agent类型都应该有）
 }
 
 // MCP运行时Agent（来自MCP服务器的运行时数据）
@@ -21,6 +22,7 @@ interface MCPAgent extends BaseAgent {
 interface ConfigAgent extends BaseAgent {
   description: string;
   api_key?: string;
+  api_key_display?: string; // 掩码显示的API密钥
   rate_limit: {
     requests_per_minute: number;
     requests_per_hour: number;
@@ -29,8 +31,11 @@ interface ConfigAgent extends BaseAgent {
   permissions: {
     can_submit_articles: boolean;
     can_edit_own_articles: boolean;
-    can_delete_own_articles: boolean;
+    can_edit_others_articles: boolean;
+    can_approve_articles: boolean;
+    can_publish_articles: boolean;
     can_view_statistics: boolean;
+    can_review_agents: string[];
     allowed_categories: string[];
     allowed_tags: string[];
   };
@@ -40,6 +45,9 @@ interface ConfigAgent extends BaseAgent {
     on_publish_success: boolean;
     on_publish_failure: boolean;
   };
+  // v3.0 角色模板支持
+  role_template_id?: string;
+  permissions_override?: Record<string, any>;
   // 数据库统计字段
   total_articles_submitted?: number;
   total_articles_published?: number;
@@ -61,8 +69,11 @@ interface AgentFormData extends BaseAgent {
   permissions: {
     can_submit_articles: boolean;
     can_edit_own_articles: boolean;
-    can_delete_own_articles: boolean;
+    can_edit_others_articles: boolean;
+    can_approve_articles: boolean;
+    can_publish_articles: boolean;
     can_view_statistics: boolean;
+    can_review_agents: string[];
     allowed_categories: string[];
     allowed_tags: string[];
   };
@@ -72,6 +83,9 @@ interface AgentFormData extends BaseAgent {
     on_publish_success: boolean;
     on_publish_failure: boolean;
   };
+  // v3.0 角色模板支持
+  role_template_id?: string;
+  permissions_override?: Record<string, any>;
 }
 
 // 完整Agent（支持MCP数据 + 部分配置数据合并）

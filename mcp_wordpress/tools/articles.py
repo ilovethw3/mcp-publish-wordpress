@@ -16,6 +16,8 @@ from mcp_wordpress.core.errors import (
 )
 from mcp_wordpress.models.article import Article, ArticleStatus
 from mcp_wordpress.models.site import Site
+from mcp_wordpress.auth.permissions import require_permission, require_any_permission, require_edit_permission, require_submit_permission
+from mcp_wordpress.services.role_template_service import role_template_service
 
 
 async def get_site_config(session, site_id: str = None) -> dict:
@@ -73,6 +75,7 @@ def register_article_tools(mcp: FastMCP):
     @mcp.tool(
         description="Submit a new article for review with multi-agent support"
     )
+    @require_submit_permission()
     async def submit_article(
         title: str,
         content_markdown: str,
@@ -149,6 +152,7 @@ def register_article_tools(mcp: FastMCP):
             return error.to_json()
     
     @mcp.tool()
+    @require_permission("can_view_statistics")
     async def list_articles(
         status: str = "",
         search: str = "", 
@@ -244,6 +248,7 @@ def register_article_tools(mcp: FastMCP):
     @mcp.tool(
         description="Get detailed article status and publishing information"
     )
+    @require_permission("can_view_statistics")
     async def get_article_status(article_id: int) -> str:
         """Get detailed article status and publishing information.
         
@@ -298,7 +303,8 @@ def register_article_tools(mcp: FastMCP):
     @mcp.tool(
         description="Approve article without publishing (审批通过，但不发布)"
     )
-    async def approve_article_only(
+    @require_permission("can_approve_articles")
+    async def approve_article(
         article_id: int,
         reviewer_notes: str = ""
     ) -> str:
@@ -358,6 +364,7 @@ def register_article_tools(mcp: FastMCP):
     @mcp.tool(
         description="Publish approved article to specified WordPress site"
     )
+    @require_permission("can_publish_articles")
     async def publish_article(
         article_id: int,
         target_site_id: str,
@@ -491,6 +498,7 @@ def register_article_tools(mcp: FastMCP):
     @mcp.tool(
         description="Edit article content and metadata"
     )
+    @require_edit_permission()
     async def edit_article(
         article_id: int,
         title: str = None,
@@ -529,10 +537,7 @@ def register_article_tools(mcp: FastMCP):
                 if article.status not in [ArticleStatus.PENDING_REVIEW.value, ArticleStatus.APPROVED.value]:
                     raise InvalidStatusError(article.status, f"{ArticleStatus.PENDING_REVIEW.value} or {ArticleStatus.APPROVED.value}")
                 
-                # 检查权限：只允许原作者或有权限的Agent编辑
-                if editing_agent_id and editing_agent_id != article.submitting_agent_id:
-                    # 这里应该检查Agent权限，暂时允许所有Agent编辑
-                    pass
+                # 权限检查已由装饰器完成（包括所有权和内容限制检查）
                 
                 # 记录修改前的值用于历史记录
                 changes = {}
@@ -608,6 +613,7 @@ def register_article_tools(mcp: FastMCP):
     @mcp.tool(
         description="Reject article with reason"
     )
+    @require_permission("can_approve_articles")
     async def reject_article(
         article_id: int,
         rejection_reason: str
@@ -657,6 +663,7 @@ def register_article_tools(mcp: FastMCP):
     @mcp.tool(
         description="List all configured AI agents and their status"
     )
+    @require_permission("can_view_statistics")
     async def list_agents(include_inactive: bool = False) -> str:
         """List all configured AI agents and their status.
         
@@ -712,6 +719,7 @@ def register_article_tools(mcp: FastMCP):
     @mcp.tool(
         description="List all configured WordPress sites and their health status"
     )
+    @require_permission("can_view_statistics")
     async def list_sites(include_inactive: bool = False) -> str:
         """List all configured WordPress sites and their health status.
         
@@ -766,6 +774,7 @@ def register_article_tools(mcp: FastMCP):
     @mcp.tool(
         description="Get statistics for a specific agent"
     )
+    @require_permission("can_view_statistics")
     async def get_agent_stats(agent_id: str) -> str:
         """Get detailed statistics for a specific agent.
         
@@ -826,6 +835,7 @@ def register_article_tools(mcp: FastMCP):
     @mcp.tool(
         description="Get health status and metrics for a WordPress site"
     )
+    @require_permission("can_view_statistics")
     async def get_site_health(site_id: str) -> str:
         """Get health status and metrics for a WordPress site.
         

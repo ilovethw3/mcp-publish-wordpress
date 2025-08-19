@@ -1,9 +1,11 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { useConnectionStatus } from '@/hooks/useMCPData';
+import { useAuth } from '@/contexts/AuthContext';
 import Badge from '../ui/Badge';
 import LoadingSpinner from '../ui/LoadingSpinner';
+import { User, LogOut, Settings } from 'lucide-react';
 
 interface HeaderProps {
   onMenuClick: () => void;
@@ -12,6 +14,8 @@ interface HeaderProps {
 
 const Header: React.FC<HeaderProps> = ({ onMenuClick, sidebarOpen }) => {
   const { isConnected, lastChecked, checkConnection } = useConnectionStatus();
+  const { user, logout } = useAuth();
+  const [showUserMenu, setShowUserMenu] = useState(false);
 
   const getConnectionStatus = () => {
     if (isConnected === null) {
@@ -104,6 +108,73 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick, sidebarOpen }) => {
               />
             </svg>
           </button>
+
+          {/* User Menu */}
+          {user && (
+            <div className="relative">
+              <button
+                onClick={() => setShowUserMenu(!showUserMenu)}
+                className="flex items-center space-x-2 rounded-md p-2 text-gray-700 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+              >
+                <div className="flex items-center justify-center w-8 h-8 bg-blue-500 text-white rounded-full">
+                  <User className="w-4 h-4" />
+                </div>
+                <div className="hidden sm:block text-left">
+                  <div className="text-sm font-medium">{user.username}</div>
+                  <div className="text-xs text-gray-500">
+                    {user.is_reviewer ? '审核员' : '用户'}
+                  </div>
+                </div>
+                <svg
+                  className="w-4 h-4 text-gray-400"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  strokeWidth="1.5"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M19.5 8.25l-7.5 7.5-7.5-7.5"
+                  />
+                </svg>
+              </button>
+
+              {/* User dropdown menu */}
+              {showUserMenu && (
+                <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none z-50">
+                  <div className="py-1">
+                    <div className="px-4 py-2 text-sm text-gray-700 border-b border-gray-200">
+                      <div className="font-medium">{user.username}</div>
+                      <div className="text-gray-500">{user.email}</div>
+                    </div>
+                    
+                    <button
+                      onClick={() => {
+                        setShowUserMenu(false);
+                        window.location.href = '/users';
+                      }}
+                      className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                    >
+                      <Settings className="w-4 h-4 mr-2" />
+                      用户管理
+                    </button>
+                    
+                    <button
+                      onClick={() => {
+                        setShowUserMenu(false);
+                        logout();
+                      }}
+                      className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                    >
+                      <LogOut className="w-4 h-4 mr-2" />
+                      退出登录
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </header>

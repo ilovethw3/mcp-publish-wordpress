@@ -11,6 +11,7 @@ const navigation = [
   { name: '代理管理', href: '/agents', icon: '👥' },
   { name: '角色模板', href: '/roles', icon: '🛡️' },
   { name: '站点管理', href: '/sites', icon: '🖥️' },
+  { name: '用户管理', href: '/users', icon: '👤' },
   { name: '安全监控', href: '/security', icon: '🔒' },
   { name: '统计分析', href: '/analytics', icon: '📊' },
   { name: '系统设置', href: '/settings', icon: '⚙️' },

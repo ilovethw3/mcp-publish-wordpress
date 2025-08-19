@@ -17,6 +17,11 @@ class User(SQLModel, table=True):
     password_hash: str = Field(description="Hashed password")
     is_active: bool = Field(default=True, description="Whether user is active")
     is_reviewer: bool = Field(default=False, description="Whether user can review articles")
+    last_login: Optional[datetime] = Field(
+        default=None,
+        description="Last login timestamp",
+        sa_column=Column(DateTime(timezone=True), nullable=True)
+    )
     
     # Timestamps
     created_at: datetime = Field(

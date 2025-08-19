@@ -2,6 +2,7 @@
 
 import React from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
+import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import StatsCard from '@/components/ui/StatsCard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import StatusBadge from '@/components/ui/StatusBadge';
@@ -24,7 +25,8 @@ const Dashboard = () => {
   const { status: securityStatus, loading: securityLoading } = useSecurityStatus();
 
   return (
-    <DashboardLayout>
+    <ProtectedRoute>
+      <DashboardLayout>
       <div className="space-y-6">
         {/* Page Header */}
         <div>
@@ -202,7 +204,8 @@ const Dashboard = () => {
           </CardContent>
         </Card>
       </div>
-    </DashboardLayout>
+      </DashboardLayout>
+    </ProtectedRoute>
   );
 };
 

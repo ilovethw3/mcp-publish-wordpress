@@ -22,6 +22,7 @@ from mcp_wordpress.core.database import get_session
 from mcp_wordpress.core.config import settings
 from mcp_wordpress.services.config_service import config_service
 from mcp_wordpress.services.role_template_service import role_template_service
+from mcp_wordpress.services.user_service import user_service
 from sqlalchemy import text
 
 logging.basicConfig(
@@ -413,6 +414,63 @@ async def create_webui_agent():
         return None
 
 
+async def create_default_admin_user():
+    """创建默认管理员用户"""
+    logger.info("👤 创建默认管理员用户...")
+    
+    try:
+        # 检查是否已存在默认管理员用户
+        try:
+            existing_user = await user_service.get_user_by_username("admin")
+            if existing_user:
+                logger.info("✅ 默认管理员用户已存在，跳过创建")
+                logger.info(f"📧 管理员邮箱: {existing_user.email}")
+                return True
+        except Exception:
+            # 用户不存在，继续创建
+            pass
+        
+        # 生成随机密码
+        default_password = secrets.token_urlsafe(12)  # 生成16字符的随机密码
+        
+        # 创建默认管理员用户
+        admin_user = await user_service.create_user(
+            username="admin",
+            email="admin@example.com",
+            password=default_password,
+            is_reviewer=True
+        )
+        
+        logger.info(f"✅ 创建默认管理员用户: {admin_user.username}")
+        logger.info(f"📧 邮箱: {admin_user.email}")
+        logger.info(f"🔐 密码: {default_password}")
+        logger.warning("⚠️  请立即登录系统并修改默认密码！")
+        
+        # 写入密码到临时文件
+        admin_credentials_file = "admin_credentials.txt"
+        try:
+            with open(admin_credentials_file, "w") as f:
+                f.write(f"默认管理员账户信息\n")
+                f.write(f"===================\n")
+                f.write(f"用户名: {admin_user.username}\n")
+                f.write(f"邮箱: {admin_user.email}\n")
+                f.write(f"密码: {default_password}\n")
+                f.write(f"\n重要提醒:\n")
+                f.write(f"1. 请立即登录系统并修改默认密码\n")
+                f.write(f"2. 此文件包含敏感信息，请妥善保管并在使用后删除\n")
+                f.write(f"3. 创建时间: {datetime.now(timezone.utc).isoformat()}\n")
+            
+            logger.info(f"📝 管理员凭据已保存到文件: {admin_credentials_file}")
+        except Exception as e:
+            logger.warning(f"⚠️  保存凭据文件失败: {e}")
+        
+        return True
+        
+    except Exception as e:
+        logger.error(f"❌ 创建默认管理员用户失败: {e}")
+        return False
+
+
 async def main():
     """主函数"""
     logger.info("🚀 生产环境数据库初始化开始...")
@@ -453,15 +511,27 @@ async def main():
         else:
             logger.info("⏭️  跳过Web UI系统Agent创建（CREATE_WEBUI_AGENT=false）")
         
+        # 5. 创建默认管理员用户
+        admin_created = False
+        if os.getenv("CREATE_ADMIN_USER", "true").lower() == "true":
+            admin_created = await create_default_admin_user()
+        else:
+            logger.info("⏭️  跳过默认管理员用户创建（CREATE_ADMIN_USER=false）")
+        
         if config_created:
             logger.info("🎉 数据库初始化完成!")
             logger.info("📋 下一步操作:")
             logger.info("   1. 启动 MCP 服务器: python -m mcp_wordpress.server")
             logger.info("   2. 启动 Web UI: cd web-ui && npm run dev")
-            logger.info("   3. 访问 Web UI 创建和配置 WordPress 站点")
+            logger.info("   3. 使用默认管理员账户登录 Web UI")
+            logger.info("   4. 修改默认密码并配置 WordPress 站点")
             
             if webui_api_key:
                 logger.info("✅ Web UI API 密钥已自动配置")
+            
+            if admin_created:
+                logger.info("✅ 默认管理员用户已创建")
+                logger.info("⚠️  请查看 admin_credentials.txt 文件获取登录信息")
         else:
             logger.error("❌ 默认配置创建失败")
             sys.exit(1)
@@ -503,6 +573,7 @@ if __name__ == "__main__":
             await init_production_schema()  # 通过 Alembic 重新创建
             await create_essential_config()
             await create_webui_agent()
+            await create_default_admin_user()
             logger.info("🎉 强制清理和重建完成!")
             
         asyncio.run(force_clean())
@@ -514,6 +585,7 @@ if __name__ == "__main__":
             await clean_database()  # 只清理数据，保留表结构
             await create_essential_config()
             await create_webui_agent()
+            await create_default_admin_user()
             logger.info("🎉 数据清理完成!")
             
         asyncio.run(clean_data())

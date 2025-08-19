@@ -85,6 +85,9 @@ web-ui/.env.production.local
 web-ui/.env.staging.local
 web-ui/.env.development.local
 
+# TypeScript build cache
+web-ui/tsconfig.tsbuildinfo
+
 # Project specific
 backup_*.sql
 *.backup
